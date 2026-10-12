@@ -1,6 +1,6 @@
 # Kazumi-Enhanced
 
-基于 [Predidit/Kazumi](https://github.com/Predidit/Kazumi) 2.3.8 开发的增强版，面向 Windows 桌面使用。保留原项目作者、提交历史和 **GPL-3.0** 许可证。本仓库由 **jisongmuli** 独立维护。
+基于 [Predidit/Kazumi](https://github.com/Predidit/Kazumi) 2.3.8 开发的增强版，支持 Windows 桌面及 Android 平板使用。保留原项目作者、提交历史和 **GPL-3.0** 许可证。本仓库由 **jisongmuli** 独立维护。
 
 ![Flutter](https://img.shields.io/badge/Flutter-3.47.6-blue)
 ![License](https://img.shields.io/badge/License-GPL--3.0-green)
@@ -10,6 +10,7 @@
 ## 增强功能
 
 - 浅色商业风格主页：首页、动漫、影视、短剧、YouTube、我的；轮播、分类、统一搜索、真实封面、继续观看和分页。
+- 动漫浏览使用公开热门目录，分类和搜索在缺少镜像签名时使用官方 ECH 接口；支持目录缓存、下拉刷新、骨架屏、触屏反馈与减少动画。
 - 45 个影视/视频站入口，保留原地址并新增公告公布的其他地址；可读取的站点支持详情、线路和选集。
 - 播放来源检索包含已安装的动漫、影视、短剧与 YouTube 来源；支持分类和“有结果”筛选，区分空结果、验证、超时及连接失败。影视封面页与统一搜索汇总多个站点，逐步显示结果。
 - 红果官方短剧入口，仅使用官方网页开放的内容。
@@ -56,7 +57,7 @@ flutter analyze --no-fatal-infos --fatal-warnings
 flutter test --no-pub
 ```
 
-增强版在 Windows 本机通过 **282 项测试**，已验证主页真实目录/分类/搜索、跨站片源检索、首次安装内置规则、桌面和窄屏布局、YouTube 实际画质、插帧动态启停和中间帧。联网/原生 GPU 探测位于 `tools/*_live_test.dart`，不混入普通离线测试。
+增强版在 Windows 本机通过 **290 项测试**，已验证主页真实目录/分类/搜索、跨站片源检索、首次安装内置规则、桌面和窄屏布局、YouTube 实际画质、插帧动态启停和中间帧。平板网络探测在不使用电脑代理的情况下验证五个动漫分类、分页、搜索和封面读取；尚未完成 Android 平板实机复核。联网/原生 GPU 探测位于 `tools/*_live_test.dart`，不混入普通离线测试。
 
 GitHub Actions 在推送 main 和提交 PR 时执行 Windows 安装、检查、测试、编译，并提供便携构建 artifact。其他平台沿用上游源码，但此增强版尚未逐一验证；上游原工作流保存在 `.github/upstream-workflows/` 供参考。
 

@@ -104,12 +104,16 @@ class PortalListing {
     this.sourceCount = 0,
     this.completedSources = 0,
     this.sourceErrors = const {},
+    this.cachedAt,
+    this.notice,
   });
   final List<PortalItem> items;
   final String? next;
   final int sourceCount;
   final int completedSources;
   final Map<String, String> sourceErrors;
+  final DateTime? cachedAt;
+  final String? notice;
 }
 
 String portalTime(Duration time) {

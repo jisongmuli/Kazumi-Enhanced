@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 import 'package:kazumi/modules/history/history_module.dart';
 import 'package:kazumi/pages/portal/portal_catalog.dart';
+import 'package:kazumi/pages/portal/portal_anime_cache.dart';
+import 'package:kazumi/pages/portal/portal_cards.dart';
 import 'package:kazumi/pages/portal/portal_controller.dart';
 import 'package:kazumi/pages/portal/portal_header.dart';
 import 'package:kazumi/pages/portal/portal_models.dart';
@@ -367,6 +370,145 @@ void main() {
     },
   );
   test(
+    'public browsing has its own cursor and never replaces keyword search',
+    () async {
+      final browseOffsets = <int>[];
+      final queries = <String>[];
+      var browseFails = false;
+      final catalog = LivePortalCatalog(
+        animeBrowse: (offset, token) async {
+          browseOffsets.add(offset);
+          return browseFails
+              ? null
+              : BangumiSearchPage(items: [anime(100 + offset)], rawCount: 20);
+        },
+        animeQuery: (keyword, tags, offset, token) async {
+          queries.add('$keyword:${tags.join(",")}:$offset');
+          return BangumiSearchPage(items: [anime(1)], rawCount: 20);
+        },
+      );
+      final first = await catalog.fetch(PortalCategory.anime);
+      expect(first.next, 'popular:20');
+      final second = await catalog.fetch(
+        PortalCategory.anime,
+        next: first.next,
+      );
+      expect(second.items.single.anime!.id, 120);
+      expect(browseOffsets, [0, 20]);
+      expect(queries, isEmpty);
+      await catalog.fetch(PortalCategory.anime, keyword: '凡人修仙传');
+      await catalog.fetch(PortalCategory.chineseAnime);
+      expect(queries, ['凡人修仙传::0', ':中国:0']);
+      browseFails = true;
+      await expectLater(
+        catalog.fetch(PortalCategory.anime, next: 'popular:40'),
+        throwsStateError,
+      );
+      expect(
+        queries.length,
+        2,
+      ); // Never splice another ordering into popular pages.
+    },
+  );
+  test(
+    'a browse outage falls back to search and retains search offsets on the next page',
+    () async {
+      var browses = 0;
+      final offsets = <int>[];
+      final catalog = LivePortalCatalog(
+        animeBrowse: (offset, token) async {
+          browses++;
+          throw StateError('热门镜像不可用');
+        },
+        animeQuery: (_, _, offset, _) async {
+          offsets.add(offset);
+          return BangumiSearchPage(items: [anime(offset + 1)], rawCount: 20);
+        },
+      );
+      final first = await catalog.fetch(PortalCategory.anime);
+      expect(first.next, '20');
+      await catalog.fetch(PortalCategory.anime, next: first.next);
+      expect(browses, 1);
+      expect(offsets, [0, 20]);
+    },
+  );
+  test(
+    'a cold offline catalog restores real cached titles only for the same filter',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'kazumi-portal-test-',
+      );
+      addTearDown(() async {
+        expect(
+          directory.absolute.path,
+          startsWith(Directory.systemTemp.absolute.path),
+        );
+        await directory.delete(recursive: true);
+      });
+      final disk = PortalAnimeDiskCache(directory: () async => directory);
+      final online = LivePortalCatalog(
+        animeCache: disk,
+        animeQuery: (_, _, _, _) async =>
+            BangumiSearchPage(items: [anime(42)], rawCount: 20),
+      );
+      await online.fetch(PortalCategory.chineseAnime);
+      await online.fetch(PortalCategory.chineseAnime, refresh: true);
+      final offline = LivePortalCatalog(
+        animeCache: disk,
+        animeQuery: (_, _, _, _) async => null,
+      );
+      final progress = <PortalListing>[];
+      final restored = await offline.fetch(
+        PortalCategory.chineseAnime,
+        onProgress: progress.add,
+      );
+      expect(restored.items.single.anime!.id, 42);
+      expect(restored.items.single.anime!.airDate, '2024-01-01');
+      expect(restored.cachedAt, isNotNull);
+      expect(restored.notice, contains('已缓存'));
+      expect(progress.single.items.single.title, restored.items.single.title);
+      await expectLater(
+        offline.fetch(PortalCategory.japaneseAnime),
+        throwsStateError,
+      );
+      await expectLater(
+        offline.fetch(PortalCategory.chineseAnime, keyword: '其它'),
+        throwsStateError,
+      );
+      // A truncated file is disposable and must not crash a subsequent request.
+      final file =
+          (await directory
+                      .list()
+                      .where((f) => f.path.endsWith('.json'))
+                      .toList())
+                  .single
+              as File;
+      await file.writeAsString('{truncated');
+      expect(await disk.read('chineseAnime::null'), isNull);
+    },
+  );
+  test(
+    'refresh keeps visible content and a failed refresh does not erase it',
+    () async {
+      final catalog = FakeCatalog();
+      final controller = PortalController(
+        channel: PortalChannel.anime,
+        catalog: catalog,
+      );
+      await controller.load();
+      final titles = controller.items.map((i) => i.title).toList();
+      catalog.delayed[''] = Completer();
+      final refresh = controller.load(refresh: true);
+      expect(controller.loading, isTrue);
+      expect(controller.items.map((i) => i.title), titles);
+      catalog.delayed['']!.completeError(StateError('离线'));
+      await refresh;
+      expect(controller.items.map((i) => i.title), titles);
+      expect(controller.errors[PortalCategory.anime], '离线');
+      controller.dispose();
+    },
+  );
+  test(
     'category links and source scores are validated; missing scores stay unknown',
     () {
       final parsed = CinemaParser.categoryLinks(
@@ -546,6 +688,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('category:anime')));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       expect(controller.keyword, '搜索词');
       expect(controller.items.every((i) => i.anime != null), isTrue);
       await tester.tap(find.byKey(const ValueKey('poster:anime:1')));
@@ -553,6 +696,103 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       controller.dispose();
       await repo.updates.close();
+    },
+  );
+  testWidgets(
+    'changing the channel controller starts the new anime feed even when the element is reused',
+    (tester) async {
+      final catalog = FakeCatalog();
+      final home = PortalController(
+        channel: PortalChannel.home,
+        catalog: catalog,
+      );
+      final animeController = PortalController(
+        channel: PortalChannel.anime,
+        catalog: catalog,
+      );
+      final repo = FakeHistory();
+      await home.load();
+      await tester.pumpWidget(testApp(home, repo));
+      await tester.pumpWidget(testApp(animeController, repo));
+      await tester.pumpAndSettle();
+      expect(animeController.initialized, isTrue);
+      expect(catalog.requests.last.category, PortalCategory.anime);
+      expect(find.byKey(const ValueKey('poster:anime:1')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      home.dispose();
+      animeController.dispose();
+      await repo.updates.close();
+    },
+  );
+  testWidgets(
+    'tablet loading shows cover skeletons, and the error panel retry loads real results',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final catalog = FakeCatalog()..delayed[''] = Completer();
+      final controller = PortalController(
+        channel: PortalChannel.anime,
+        catalog: catalog,
+      );
+      final repo = FakeHistory();
+      await tester.pumpWidget(testApp(controller, repo));
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('portal-skeleton-grid')),
+        findsOneWidget,
+      );
+      expect(find.text('0 项内容'), findsNothing);
+      catalog.delayed['']!.completeError(StateError('目录不可用'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('error:anime')), findsOneWidget);
+      catalog.delayed.clear();
+      await tester.tap(find.byKey(const ValueKey('retry:anime')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('error:anime')), findsNothing);
+      expect(find.byKey(const ValueKey('poster:anime:1')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+      await repo.updates.close();
+    },
+  );
+  testWidgets(
+    'touch press feedback operates without hover and honors reduced motion',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: Material(
+              child: Center(
+                child: SizedBox(
+                  width: 160,
+                  height: 260,
+                  child: PortalPoster(
+                    item: PortalItem.fromAnime(anime(1)),
+                    onTap: () {},
+                    artwork: (_, _, _) => const ColoredBox(color: Colors.blue),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('poster:anime:1'))),
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+      var scale = tester.widget<AnimatedScale>(find.byType(AnimatedScale));
+      expect(scale.scale, lessThan(1));
+      expect(scale.duration, Duration.zero);
+      await gesture.up();
+      await tester.pump();
+      scale = tester.widget<AnimatedScale>(find.byType(AnimatedScale));
+      expect(scale.scale, 1);
     },
   );
 }

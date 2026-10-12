@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:kazumi/request/core/bangumi_mirror_policy.dart';
 import 'package:kazumi/request/core/dio_factory.dart';
 import 'package:kazumi/request/core/network_error_mapper.dart';
+import 'package:kazumi/request/config/api_endpoints.dart';
 import 'package:kazumi/services/network/bangumi_acceleration.dart';
 import 'package:kazumi/services/storage/storage.dart';
 import 'package:kazumi/utils/bangumi_mirror_credentials.dart';
@@ -23,23 +24,56 @@ class BangumiClient {
     CancelToken? cancelToken,
   }) async {
     try {
-      final response = await DioFactory.bangumiDio.get(
-        url,
-        queryParameters: queryParameters,
-        options: Options(
-          headers: _headers(
-            requiresAuth: requiresAuth,
-            accessToken: accessToken,
-            url: url,
-            method: 'GET',
-          ),
-        ),
-        cancelToken: cancelToken,
+      final headers = _headers(
+        requiresAuth: requiresAuth,
+        accessToken: accessToken,
+        url: url,
+        method: 'GET',
       );
+      Future<Response<dynamic>> request({bool fallback = false}) =>
+          DioFactory.bangumiDio.get(
+            url,
+            queryParameters: queryParameters,
+            options: Options(
+              headers: headers,
+              extra: {if (fallback) 'bangumiForceEch': true},
+            ),
+            cancelToken: cancelToken,
+          );
+      Response<dynamic> response;
+      try {
+        response = await request();
+      } on DioException catch (error) {
+        if (!canRetryMirrorMetadata(url, error) ||
+            cancelToken?.isCancelled == true)
+          rethrow;
+        response = await request(fallback: true);
+      }
       return response.data;
     } on DioException catch (e) {
       throw await NetworkErrorMapper.mapException(e);
     }
+  }
+
+  /// Only retry a public metadata route that was actually sent to the mirror.
+  /// Account writes, authentication failures and cancellation never retry.
+  static bool canRetryMirrorMetadata(String originalUrl, DioException error) {
+    if (!ApiEndpoints.bangumiPublicApiHosts.contains(
+          Uri.parse(originalUrl).host,
+        ) ||
+        error.requestOptions.uri.host !=
+            Uri.parse(ApiEndpoints.bangumiMirrorDomain).host ||
+        error.requestOptions.method != 'GET')
+      return false;
+    return switch (error.type) {
+      DioExceptionType.connectionError ||
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.receiveTimeout => true,
+      DioExceptionType.badResponse =>
+        error.response?.statusCode == 404 ||
+            (error.response?.statusCode ?? 0) >= 500,
+      _ => false,
+    };
   }
 
   Future<dynamic> post(

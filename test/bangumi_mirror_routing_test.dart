@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kazumi/request/core/bangumi_transport.dart';
+import 'package:kazumi/request/clients/bangumi_client.dart';
 import 'package:kazumi/services/network/bangumi_acceleration.dart';
 
 void main() {
@@ -51,6 +52,7 @@ void main() {
         Uri.parse('https://api.bgm.tv/v0/search/subjects?limit=20&offset=20'),
       );
       expect(jsonDecode(adapter.body), data);
+      expect(adapter.request.extra['bangumiEch'], isTrue);
       expect(response.data['data'].single['name_cn'], '葬送的芙莉莲');
     },
   );
@@ -81,6 +83,7 @@ void main() {
         final url = 'https://next.bgm.tv/p1/$kind/400602/comments?limit=20';
         await dio.get(url);
         expect(adapter.request.uri, Uri.parse(url));
+        expect(adapter.request.extra['bangumiEch'], isTrue);
       }
     },
   );
@@ -110,6 +113,76 @@ void main() {
         await dio.post(url);
         expect(adapter.request.uri, Uri.parse(url));
       }
+    },
+  );
+
+  test(
+    'metadata fallback only retries unsupported or unavailable public mirror GETs',
+    () {
+      final options = RequestOptions(
+        path: 'https://api.kazumi.fyi/p1/subjects/400602',
+      );
+      DioException failure(DioExceptionType type, [int? status]) =>
+          DioException(
+            requestOptions: options,
+            type: type,
+            response: status == null
+                ? null
+                : Response(requestOptions: options, statusCode: status),
+          );
+      const original = 'https://next.bgm.tv/p1/subjects/400602';
+      expect(
+        BangumiClient.canRetryMirrorMetadata(
+          original,
+          failure(DioExceptionType.badResponse, 404),
+        ),
+        isTrue,
+      );
+      expect(
+        BangumiClient.canRetryMirrorMetadata(
+          original,
+          failure(DioExceptionType.connectionTimeout),
+        ),
+        isTrue,
+      );
+      for (final status in [400, 401, 403, 429]) {
+        expect(
+          BangumiClient.canRetryMirrorMetadata(
+            original,
+            failure(DioExceptionType.badResponse, status),
+          ),
+          isFalse,
+        );
+      }
+      expect(
+        BangumiClient.canRetryMirrorMetadata(
+          original,
+          failure(DioExceptionType.cancel),
+        ),
+        isFalse,
+      );
+      expect(
+        BangumiClient.canRetryMirrorMetadata(
+          original,
+          failure(DioExceptionType.badCertificate),
+        ),
+        isFalse,
+      );
+      expect(
+        BangumiClient.canRetryMirrorMetadata(
+          'https://api.bgmapi.com/v0/me',
+          failure(DioExceptionType.connectionTimeout),
+        ),
+        isFalse,
+      );
+      options.method = 'POST';
+      expect(
+        BangumiClient.canRetryMirrorMetadata(
+          original,
+          failure(DioExceptionType.connectionTimeout),
+        ),
+        isFalse,
+      );
     },
   );
 }

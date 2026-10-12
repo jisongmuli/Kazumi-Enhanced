@@ -270,6 +270,38 @@ class BangumiApi {
     return bangumiList;
   }
 
+  /// The public browse cache does not require the release-only signing keys.
+  /// Keep raw row counts, including unparseable rows, for correct pagination.
+  static Future<BangumiSearchPage?> getPortalPopularPage(
+    int offset,
+    CancelToken? cancelToken,
+  ) async {
+    try {
+      final json = await _client.get(
+        ApiEndpoints.bangumiMirrorDomain +
+            buildBangumiMirrorPopularPath(limit: 20, offset: offset),
+        cancelToken: cancelToken,
+      );
+      final rows = json is List ? json : json['data'];
+      if (rows is! List) throw const FormatException('Invalid browse response');
+      final items = <BangumiItem>[];
+      for (final row in rows) {
+        try {
+          final item = BangumiItem.fromJson(Map<String, dynamic>.from(row));
+          if (item.id > 0 && item.type == 2 && item.nameCn.isNotEmpty)
+            items.add(item);
+        } catch (_) {
+          /* A damaged row must not blank the entire catalog. */
+        }
+      }
+      if (rows.isNotEmpty && items.isEmpty) return null;
+      return BangumiSearchPage(items: items, rawCount: rows.length);
+    } catch (error) {
+      KazumiLogger().w('Portal: public anime browse unavailable', error: error);
+      return null;
+    }
+  }
+
   static List<String> _buildNumberFilter<T extends num>(T? min, T? max) {
     return [if (min != null) '>=$min', if (max != null) '<=$max'];
   }

@@ -1,4 +1,5 @@
 import 'package:flutter_modular/flutter_modular.dart';
+import 'package:flutter/widgets.dart';
 import 'package:kazumi/pages/portal/portal_controller.dart';
 import 'package:kazumi/pages/portal/portal_models.dart';
 import 'package:kazumi/pages/portal/portal_page.dart';
@@ -6,6 +7,7 @@ import 'package:kazumi/repositories/history_repository.dart';
 import 'package:kazumi/services/storage/storage.dart';
 
 PortalPage portalPage(PortalChannel channel) => PortalPage(
+  key: ValueKey(channel),
   controller: inject<PortalHub>().forChannel(channel),
   historyRepository: inject<IHistoryRepository>(),
   showScore: GStorage.getSetting(SettingsKeys.showRating),

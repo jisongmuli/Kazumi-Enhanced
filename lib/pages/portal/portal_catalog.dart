@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:kazumi/pages/portal/portal_models.dart';
+import 'package:kazumi/pages/portal/portal_anime_cache.dart';
 import 'package:kazumi/request/apis/bangumi_api.dart';
 import 'package:kazumi/services/cinema/cinema_models.dart';
 import 'package:kazumi/services/cinema/cinema_service.dart';
@@ -15,6 +16,8 @@ typedef PortalAnimeQuery =
       int offset,
       CancelToken? cancelToken,
     );
+typedef PortalAnimeBrowse =
+    Future<BangumiSearchPage?> Function(int offset, CancelToken? cancelToken);
 
 abstract class PortalCatalog {
   Future<PortalListing> fetch(
@@ -32,12 +35,21 @@ class LivePortalCatalog implements PortalCatalog {
     CinemaService? cinema,
     YoutubeSourceService? youtube,
     PortalAnimeQuery? animeQuery,
+    PortalAnimeBrowse? animeBrowse,
+    PortalAnimeDiskCache? animeCache,
   }) : cinema = cinema ?? CinemaService.instance,
        youtube = youtube ?? YoutubeSourceService.instance,
-       _animeQuery = animeQuery ?? _queryAnime;
+       _animeQuery = animeQuery ?? _queryAnime,
+       _animeBrowse =
+           animeBrowse ??
+           (animeQuery == null ? BangumiApi.getPortalPopularPage : null),
+       _animeCache =
+           animeCache ?? (animeQuery == null ? PortalAnimeDiskCache() : null);
   final CinemaService cinema;
   final YoutubeSourceService youtube;
   final PortalAnimeQuery _animeQuery;
+  final PortalAnimeBrowse? _animeBrowse;
+  final PortalAnimeDiskCache? _animeCache;
   static Future<BangumiSearchPage?> _queryAnime(
     String keyword,
     List<String> tags,
@@ -86,7 +98,9 @@ class LivePortalCatalog implements PortalCatalog {
             : null,
       );
     } else if (_animeCategories.contains(category)) {
-      final offset = int.tryParse(next ?? '') ?? 0;
+      final popularCursor = next?.startsWith('popular:') == true;
+      final offset =
+          int.tryParse(popularCursor ? next!.substring(8) : next ?? '') ?? 0;
       final tags = switch (category) {
         PortalCategory.chineseAnime => ['中国'],
         PortalCategory.japaneseAnime => ['日本'],
@@ -94,12 +108,62 @@ class LivePortalCatalog implements PortalCatalog {
         PortalCategory.animationShort => ['短片'],
         _ => <String>[],
       };
-      final page = await _animeQuery(keyword, tags, offset, cancelToken);
-      if (page == null) throw StateError('动漫目录暂时无法连接，请检查网络后重试');
+      final saved = next == null ? await _animeCache?.read(key) : null;
+      if (cancelToken?.isCancelled == true) throw StateError('请求已取消');
+      if (saved != null)
+        onProgress?.call(
+          PortalListing(
+            saved.items,
+            next: saved.next,
+            cachedAt: saved.cachedAt,
+            notice: '正在更新目录…',
+          ),
+        );
+      BangumiSearchPage? page;
+      var popular = false;
+      try {
+        // A popular cursor stays on its own dataset. Search offsets must never
+        // silently become popular offsets (or vice versa).
+        if (keyword.isEmpty &&
+            tags.isEmpty &&
+            _animeBrowse != null &&
+            (next == null || popularCursor)) {
+          try {
+            page = await _animeBrowse(offset, cancelToken);
+          } catch (_) {
+            if (cancelToken?.isCancelled == true) rethrow;
+          }
+          popular = page != null;
+        }
+        if (page == null &&
+            !popularCursor &&
+            cancelToken?.isCancelled != true) {
+          page = await _animeQuery(keyword, tags, offset, cancelToken);
+        }
+      } catch (_) {
+        if (cancelToken?.isCancelled == true) rethrow;
+      }
+      if (cancelToken?.isCancelled == true) throw StateError('请求已取消');
+      if (page == null) {
+        final previous = saved ?? cached?.data;
+        if (previous != null && previous.items.isNotEmpty) {
+          return PortalListing(
+            previous.items,
+            next: previous.next,
+            cachedAt: previous.cachedAt ?? cached?.time,
+            notice: '暂时无法连接，正在显示已缓存的目录。可下拉刷新或重试。',
+          );
+        }
+        throw StateError('动漫目录暂时无法连接，请重试或在设置中检查网络加速');
+      }
       result = PortalListing(
         page.items.map(PortalItem.fromAnime).toList(),
-        next: page.rawCount >= 20 ? '${offset + page.rawCount}' : null,
+        next: page.rawCount >= 20
+            ? '${popular ? "popular:" : ""}${offset + page.rawCount}'
+            : null,
       );
+      if (next == null && cancelToken?.isCancelled != true)
+        await _animeCache?.write(key, result);
     } else {
       result = await _films(
         category,

@@ -14,6 +14,7 @@ import 'package:kazumi/pages/portal/portal_controller.dart';
 import 'package:kazumi/pages/portal/portal_models.dart';
 import 'package:kazumi/pages/portal/portal_playback.dart';
 import 'package:kazumi/pages/portal/portal_theme.dart';
+import 'package:kazumi/pages/portal/portal_motion.dart';
 import 'package:kazumi/repositories/history_repository.dart';
 import 'package:kazumi/services/cinema/cinema_service.dart';
 import 'package:kazumi/services/player/history_playback_service.dart';
@@ -72,6 +73,28 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
         .where((entry) => seen.add(entry.bangumiItem.id))
         .take(4)
         .toList();
+  }
+
+  @override
+  void didUpdateWidget(covariant PortalPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.historyRepository != widget.historyRepository) {
+      historyChanges?.cancel();
+      _readHistory();
+      historyChanges = widget.historyRepository.changes.listen((_) {
+        if (mounted) setState(_readHistory);
+      });
+    }
+    if (oldWidget.controller != controller) {
+      oldWidget.controller.scrollOffset = scroll.hasClients ? scroll.offset : 0;
+      visible = 42;
+      lastScrollReset = controller.scrollReset;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && scroll.hasClients)
+          scroll.jumpTo(controller.scrollOffset);
+      });
+      if (!controller.initialized) unawaited(controller.load());
+    }
   }
 
   @override
@@ -216,121 +239,156 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
           builder: (context, box) {
             final inset = box.maxWidth < 650 ? 12.0 : 20.0;
             final width = (box.maxWidth - inset * 2).clamp(0.0, 1720.0);
-            return SingleChildScrollView(
-              controller: scroll,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: SizedBox(
-                  width: width,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _categories(),
-                      if (controller.loading)
-                        const LinearProgressIndicator(minHeight: 2)
-                      else
-                        const SizedBox(height: 2),
-                      const SizedBox(height: 10),
-                      if (controller.isLanding) ...[
-                        _featured(width),
-                        const SizedBox(height: 16),
-                        _continue(width),
-                        const SizedBox(height: 16),
-                        _shelf(
-                          '热门推荐',
-                          controller.items.take(7).toList(),
-                          width,
-                          onMore: () => _select(PortalCategory.all),
-                          loading:
-                              controller.loading && controller.items.isEmpty,
-                        ),
-                        const SizedBox(height: 16),
-                        for (final category in controller.targets) ...[
-                          _feedShelf(category, width),
-                          const SizedBox(height: 16),
-                        ],
-                      ] else ...[
-                        _resultsHeader(),
-                        if (controller.channel == PortalChannel.youtube)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 14),
-                            child: Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                for (final query in [
-                                  '旅行 风景 4K',
-                                  '科技 数码',
-                                  '动画 短片',
-                                  '音乐 现场',
-                                  '纪录片 中文',
-                                ])
-                                  ActionChip(
-                                    label: Text(query),
-                                    onPressed: () => controller.load(
-                                      category: PortalCategory.youtube,
-                                      keyword: query,
-                                    ),
-                                  ),
-                              ],
+            return PortalReveal(
+              child: RefreshIndicator(
+                onRefresh: () => controller.load(refresh: true),
+                child: SingleChildScrollView(
+                  controller: scroll,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      width: width,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _categories(),
+                          if (controller.loading)
+                            const LinearProgressIndicator(minHeight: 2)
+                          else
+                            const SizedBox(height: 2),
+                          const SizedBox(height: 10),
+                          if (controller.isLanding) ...[
+                            _featured(width),
+                            const SizedBox(height: 16),
+                            _continue(width),
+                            const SizedBox(height: 16),
+                            _shelf(
+                              '热门推荐',
+                              controller.items.take(7).toList(),
+                              width,
+                              onMore: () => _select(PortalCategory.all),
+                              loading:
+                                  controller.loading &&
+                                  controller.items.isEmpty,
                             ),
-                          ),
-                        _grid(controller.items.take(visible).toList(), width),
-                        for (final category in controller.targets)
-                          if (controller.errors[category] != null ||
-                              controller.pending.contains(category))
-                            Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: _feedState(category),
-                            ),
-                        if (controller.items.isEmpty &&
-                            !controller.loading &&
-                            controller.errors.isEmpty)
-                          _empty(
-                            controller.keyword.isEmpty
-                                ? '这个分类暂时没有内容'
-                                : '没有找到相关内容，试试其他关键词',
-                          ),
-                        const SizedBox(height: 18),
-                        if (controller.items.length > visible ||
-                            controller.groups.values.any((p) => p.next != null))
-                          Center(
-                            child: OutlinedButton.icon(
-                              key: const ValueKey('portal-load-more'),
-                              onPressed: controller.loadingMore.isNotEmpty
-                                  ? null
-                                  : () {
-                                      if (controller.items.length > visible) {
-                                        setState(() => visible += 42);
-                                      } else {
-                                        visible += 42;
-                                        for (final target
-                                            in controller.targets) {
-                                          unawaited(
-                                            controller.loadMore(target),
-                                          );
-                                        }
-                                      }
-                                    },
-                              icon: controller.loadingMore.isEmpty
-                                  ? const Icon(Icons.expand_more)
-                                  : const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+                            const SizedBox(height: 16),
+                            for (final category in controller.targets) ...[
+                              _feedShelf(category, width),
+                              const SizedBox(height: 16),
+                            ],
+                          ] else ...[
+                            _resultsHeader(),
+                            if (controller.channel == PortalChannel.youtube)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 14),
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    for (final query in [
+                                      '旅行 风景 4K',
+                                      '科技 数码',
+                                      '动画 短片',
+                                      '音乐 现场',
+                                      '纪录片 中文',
+                                    ])
+                                      ActionChip(
+                                        label: Text(query),
+                                        onPressed: () => controller.load(
+                                          category: PortalCategory.youtube,
+                                          keyword: query,
+                                        ),
                                       ),
-                                    ),
-                              label: Text(
-                                controller.loadingMore.isEmpty
-                                    ? '加载更多'
-                                    : '正在加载',
+                                  ],
+                                ),
                               ),
+                            for (final page in controller.groups.entries)
+                              if (page.value.notice != null)
+                                _cacheNotice(page.key, page.value),
+                            AnimatedSwitcher(
+                              duration: PortalMotion.duration(context, 220),
+                              switchInCurve: PortalMotion.curve,
+                              layoutBuilder: (current, previous) => Stack(
+                                alignment: Alignment.topCenter,
+                                children: [
+                                  for (final child in previous)
+                                    ExcludeSemantics(
+                                      child: IgnorePointer(child: child),
+                                    ),
+                                  ?current,
+                                ],
+                              ),
+                              child:
+                                  controller.items.isEmpty && controller.loading
+                                  ? _skeletonGrid(width)
+                                  : controller.items.isEmpty
+                                  ? const SizedBox.shrink()
+                                  : _grid(
+                                      controller.items.take(visible).toList(),
+                                      width,
+                                    ),
                             ),
-                          ),
-                        const SizedBox(height: 30),
-                      ],
-                    ],
+                            for (final category in controller.targets)
+                              if (controller.errors[category] != null ||
+                                  controller.pending.contains(category))
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: _feedState(category),
+                                ),
+                            if (controller.items.isEmpty &&
+                                !controller.loading &&
+                                controller.errors.isEmpty)
+                              _empty(
+                                controller.keyword.isEmpty
+                                    ? '这个分类暂时没有内容'
+                                    : '没有找到相关内容，试试其他关键词',
+                              ),
+                            const SizedBox(height: 18),
+                            if (controller.items.length > visible ||
+                                controller.groups.values.any(
+                                  (p) => p.next != null,
+                                ))
+                              Center(
+                                child: OutlinedButton.icon(
+                                  key: const ValueKey('portal-load-more'),
+                                  onPressed: controller.loadingMore.isNotEmpty
+                                      ? null
+                                      : () {
+                                          if (controller.items.length >
+                                              visible) {
+                                            setState(() => visible += 42);
+                                          } else {
+                                            visible += 42;
+                                            for (final target
+                                                in controller.targets) {
+                                              unawaited(
+                                                controller.loadMore(target),
+                                              );
+                                            }
+                                          }
+                                        },
+                                  icon: controller.loadingMore.isEmpty
+                                      ? const Icon(Icons.expand_more)
+                                      : const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                  label: Text(
+                                    controller.loadingMore.isEmpty
+                                        ? '加载更多'
+                                        : '正在加载',
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 30),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -376,42 +434,58 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
               for (final category in categories)
                 Padding(
                   padding: const EdgeInsets.only(right: 10),
-                  child: TextButton(
-                    key: ValueKey('category:${category.name}'),
-                    onPressed: () => _select(
-                      category,
-                      keepQuery: controller.keyword.isNotEmpty,
-                    ),
-                    style: TextButton.styleFrom(
-                      backgroundColor: controller.category == category
+                  child: AnimatedContainer(
+                    duration: PortalMotion.duration(context, 200),
+                    curve: PortalMotion.curve,
+                    decoration: BoxDecoration(
+                      color: controller.category == category
                           ? PortalStyle.blue
                           : const Color(0xfff0f3f9),
-                      foregroundColor: controller.category == category
-                          ? Colors.white
-                          : PortalStyle.ink,
-                      minimumSize: const Size(60, 30),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 15,
-                        vertical: 10,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: controller.category == category
+                            ? PortalStyle.blue
+                            : const Color(0xffe8edf6),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(7),
-                        side: BorderSide(
-                          color: controller.category == category
-                              ? PortalStyle.blue
-                              : const Color(0xffe8edf6),
+                      boxShadow: controller.category == category
+                          ? const [
+                              BoxShadow(
+                                color: Color(0x262463ff),
+                                blurRadius: 10,
+                                offset: Offset(0, 3),
+                              ),
+                            ]
+                          : [],
+                    ),
+                    child: TextButton(
+                      key: ValueKey('category:${category.name}'),
+                      onPressed: () => _select(
+                        category,
+                        keepQuery: controller.keyword.isNotEmpty,
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: controller.category == category
+                            ? Colors.white
+                            : PortalStyle.ink,
+                        minimumSize: const Size(60, 40),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(9),
                         ),
                       ),
-                    ),
-                    child: Text(
-                      controller.keyword.isEmpty &&
-                              category == PortalCategory.anime
-                          ? '全部动漫'
-                          : controller.keyword.isEmpty &&
-                                category == PortalCategory.cinema
-                          ? '全部影视'
-                          : category.label,
-                      style: const TextStyle(fontSize: 12),
+                      child: Text(
+                        controller.keyword.isEmpty &&
+                                category == PortalCategory.anime
+                            ? '全部动漫'
+                            : controller.keyword.isEmpty &&
+                                  category == PortalCategory.cinema
+                            ? '全部影视'
+                            : category.label,
+                        style: const TextStyle(fontSize: 12),
+                      ),
                     ),
                   ),
                 ),
@@ -436,7 +510,7 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
             ),
             child: Center(
               child: controller.pending.contains(PortalCategory.anime)
-                  ? const CircularProgressIndicator(strokeWidth: 2)
+                  ? const SizedBox.expand(child: PortalSkeleton())
                   : _feedState(PortalCategory.anime),
             ),
           )
@@ -588,32 +662,72 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
         ),
       );
     }
-    return _shelf(
-      title,
-      items.take(category == PortalCategory.youtube ? 4 : 7).toList(),
-      width,
-      onMore: () => _select(category),
-      landscape: category == PortalCategory.youtube,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (controller.groups[category]?.notice != null)
+          _cacheNotice(category, controller.groups[category]!),
+        _shelf(
+          title,
+          items.take(category == PortalCategory.youtube ? 4 : 7).toList(),
+          width,
+          onMore: () => _select(category),
+          landscape: category == PortalCategory.youtube,
+        ),
+      ],
     );
   }
 
   Widget _feedState(PortalCategory category) {
     final error = controller.errors[category];
     if (error != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
+      final full = !controller.isLanding && controller.items.isEmpty;
+      return Container(
+        key: ValueKey('error:${category.name}'),
+        padding: EdgeInsets.all(full ? 32 : 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xffe8edf6)),
+        ),
+        child: Flex(
+          direction: full ? Axis.vertical : Axis.horizontal,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.info_outline, size: 18, color: PortalStyle.muted),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '${category.label}：$error',
-                style: const TextStyle(fontSize: 12, color: PortalStyle.muted),
-              ),
+            Icon(
+              full ? Icons.wifi_off_rounded : Icons.info_outline,
+              size: full ? 44 : 18,
+              color: PortalStyle.muted,
             ),
+            SizedBox(width: full ? 0 : 10, height: full ? 16 : 0),
+            if (full) ...[
+              const Text(
+                '暂时无法加载内容',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${category.label}：$error',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.6,
+                  color: PortalStyle.muted,
+                ),
+              ),
+              const SizedBox(height: 20),
+            ] else
+              Expanded(
+                child: Text(
+                  '${category.label}：$error',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: PortalStyle.muted,
+                  ),
+                ),
+              ),
             if (category == PortalCategory.youtube && !Platform.isWindows)
-              TextButton(
+              FilledButton.tonal(
                 key: const ValueKey('portal-open-youtube'),
                 onPressed: () async {
                   final query = controller.keyword.trim();
@@ -633,16 +747,19 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
                 child: const Text('打开 YouTube'),
               )
             else
-              TextButton(
+              FilledButton.tonalIcon(
                 key: ValueKey('retry:${category.name}'),
                 onPressed: () => controller.retry(category),
-                child: const Text('重试'),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('重试'),
               ),
           ],
         ),
       );
     }
     if (controller.pending.contains(category)) {
+      if (!controller.isLanding && controller.items.isEmpty)
+        return const SizedBox.shrink();
       return const Padding(
         padding: EdgeInsets.all(22),
         child: Row(
@@ -665,6 +782,44 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
     return _empty('这个分类暂时没有内容');
   }
 
+  Widget _cacheNotice(PortalCategory category, PortalListing listing) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xffeaf1ff),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.cloud_off_outlined,
+                color: PortalStyle.blue,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  listing.notice!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.5,
+                    color: PortalStyle.ink,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: controller.pending.contains(category)
+                    ? null
+                    : () => controller.retry(category),
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      );
+
   Widget _resultsHeader() => Padding(
     padding: const EdgeInsets.fromLTRB(0, 10, 0, 16),
     child: Wrap(
@@ -679,7 +834,9 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
           style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
         ),
         Text(
-          '${controller.items.length} 项内容',
+          controller.items.isEmpty && controller.loading
+              ? '正在为你加载…'
+              : '${controller.items.length} 项内容',
           style: const TextStyle(color: PortalStyle.muted, fontSize: 13),
         ),
         if (controller.groups[PortalCategory.cinema]
@@ -704,7 +861,10 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
             label: const Text('清除搜索'),
           ),
         TextButton.icon(
-          onPressed: () => controller.load(refresh: true),
+          key: const ValueKey('portal-refresh'),
+          onPressed: controller.loading
+              ? null
+              : () => controller.load(refresh: true),
           icon: const Icon(Icons.refresh, size: 18),
           label: const Text('刷新'),
         ),
@@ -734,9 +894,16 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
         _sectionHeader(title, onMore),
         const SizedBox(height: 10),
         if (loading)
-          const SizedBox(
-            height: 180,
-            child: Center(child: CircularProgressIndicator()),
+          SizedBox(
+            height: 210,
+            child: Row(
+              children: [
+                for (var i = 0; i < (width < 650 ? 3 : 7); i++) ...[
+                  if (i > 0) const SizedBox(width: 16),
+                  const Expanded(child: PortalPosterSkeleton()),
+                ],
+              ],
+            ),
           )
         else if (items.isEmpty)
           _empty('内容正在更新，请稍后刷新')
@@ -801,6 +968,7 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
     final cardWidth = (width - (count - 1) * 16) / count;
     final height = landscape ? cardWidth * 9 / 16 + 60 : cardWidth * 1.38 + 60;
     return GridView.builder(
+      key: ValueKey('grid:${controller.category.name}:${controller.keyword}'),
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: items.length,
@@ -810,12 +978,49 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
         crossAxisSpacing: 16,
         mainAxisSpacing: 20,
       ),
-      itemBuilder: (_, index) => PortalPoster(
-        item: items[index],
-        onTap: () => _details(items[index]),
-        artwork: widget.artwork,
-        showScore: widget.showScore,
-        landscape: landscape,
+      itemBuilder: (_, index) => PortalReveal(
+        key: ValueKey(items[index].key),
+        child: RepaintBoundary(
+          child: PortalPoster(
+            item: items[index],
+            onTap: () => _details(items[index]),
+            artwork: widget.artwork,
+            showScore: widget.showScore,
+            landscape: landscape,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _skeletonGrid(double width) {
+    final count = width > 1150
+        ? 7
+        : width > 950
+        ? 6
+        : width > 750
+        ? 5
+        : width > 550
+        ? 4
+        : width > 360
+        ? 3
+        : 2;
+    final cardWidth = (width - (count - 1) * 16) / count;
+    return Semantics(
+      label: '正在加载封面',
+      liveRegion: true,
+      child: GridView.builder(
+        key: const ValueKey('portal-skeleton-grid'),
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: count * 2,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: count,
+          mainAxisExtent: cardWidth * 1.38 + 60,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 20,
+        ),
+        itemBuilder: (_, _) => const PortalPosterSkeleton(),
       ),
     );
   }
@@ -853,6 +1058,13 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
       color: Colors.white,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(color: const Color(0xffedf1f8)),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x031c335d),
+          blurRadius: 14,
+          offset: Offset(0, 4),
+        ),
+      ],
     ),
     child: child,
   );

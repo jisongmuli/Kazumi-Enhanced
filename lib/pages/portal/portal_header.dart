@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kazumi/bean/appbar/drag_to_move_bar.dart';
 import 'package:kazumi/pages/portal/portal_theme.dart';
+import 'package:kazumi/pages/portal/portal_motion.dart';
 
 /// Presentational header: every visible control is provided an actual action.
 class PortalHeader extends StatefulWidget {
@@ -72,44 +73,74 @@ class _PortalHeaderState extends State<PortalHeader> {
               ),
             ),
           );
-          final navigation = Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final (index, label) in PortalHeader.destinations)
-                TextButton(
-                  onPressed: () => widget.onNavigate(index),
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(74, 58),
-                    foregroundColor: widget.selectedIndex == index
-                        ? PortalStyle.blue
-                        : PortalStyle.ink,
-                    shape: const RoundedRectangleBorder(),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        label,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-                      Container(
-                        height: 3,
-                        width: 26,
-                        decoration: BoxDecoration(
-                          color: widget.selectedIndex == index
+          final navigation = SizedBox(
+            width: 74.0 * PortalHeader.destinations.length,
+            height: 58,
+            child: Stack(
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final (index, label) in PortalHeader.destinations)
+                      TextButton(
+                        onPressed: () => widget.onNavigate(index),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(74, 58),
+                          maximumSize: const Size(74, 58),
+                          padding: EdgeInsets.zero,
+                          foregroundColor: widget.selectedIndex == index
                               ? PortalStyle.blue
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(3),
+                              : PortalStyle.ink,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AnimatedDefaultTextStyle(
+                              duration: PortalMotion.duration(context, 180),
+                              style: Theme.of(context).textTheme.labelLarge!
+                                  .copyWith(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: widget.selectedIndex == index
+                                        ? PortalStyle.blue
+                                        : PortalStyle.ink,
+                                  ),
+                              child: Text(label),
+                            ),
+                            const SizedBox(height: 7),
+                            const SizedBox(height: 3),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
-            ],
+                if (PortalHeader.destinations.any(
+                  (d) => d.$1 == widget.selectedIndex,
+                ))
+                  AnimatedPositioned(
+                    duration: PortalMotion.duration(context, 260),
+                    curve: PortalMotion.curve,
+                    left:
+                        PortalHeader.destinations.indexWhere(
+                              (d) => d.$1 == widget.selectedIndex,
+                            ) *
+                            74.0 +
+                        24,
+                    bottom: 5,
+                    child: Container(
+                      width: 26,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: PortalStyle.blue,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           );
           final search = SizedBox(
             height: 40,

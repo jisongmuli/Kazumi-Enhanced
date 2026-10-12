@@ -5,6 +5,7 @@ import 'package:kazumi/modules/history/history_module.dart';
 import 'package:kazumi/pages/menu/route_visibility.dart';
 import 'package:kazumi/pages/portal/portal_models.dart';
 import 'package:kazumi/pages/portal/portal_theme.dart';
+import 'package:kazumi/pages/portal/portal_motion.dart';
 
 typedef PortalArtworkBuilder =
     Widget Function(
@@ -43,9 +44,9 @@ class PortalArtwork extends StatelessWidget {
                   .round()
                   .clamp(1, 1920)
             : null,
-        placeholder: (_, _) => fallback,
+        placeholder: (_, _) => const PortalSkeleton(),
         errorWidget: (_, _, _) => fallback,
-        fadeInDuration: const Duration(milliseconds: 160),
+        fadeInDuration: PortalMotion.duration(context, 240),
       ),
     );
   }
@@ -53,6 +54,13 @@ class PortalArtwork extends StatelessWidget {
 
 Map<String, String> portalHeaders(PortalItem item) =>
     item.film == null ? const {} : {'Referer': item.film!.source.url};
+
+// Small poster cards use Bangumi's provided preview rather than downloading
+// every full cover. The feature banner continues to use the large artwork.
+String portalPosterUrl(PortalItem item) {
+  final preview = item.anime?.images['common'] ?? '';
+  return preview.isEmpty ? item.poster : preview;
+}
 
 class PortalPoster extends StatefulWidget {
   const PortalPoster({
@@ -74,6 +82,7 @@ class PortalPoster extends StatefulWidget {
 
 class _PortalPosterState extends State<PortalPoster> {
   bool hover = false;
+  bool pressed = false;
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -81,113 +90,128 @@ class _PortalPosterState extends State<PortalPoster> {
       onEnter: (_) => setState(() => hover = true),
       onExit: (_) => setState(() => hover = false),
       cursor: SystemMouseCursors.click,
-      child: InkWell(
-        key: ValueKey('poster:${item.key}'),
-        onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    PortalArtwork(
-                      url: item.poster,
-                      headers: portalHeaders(item),
-                      builder: widget.artwork,
-                    ),
-                    if (item.badge.isNotEmpty ||
-                        widget.showScore && item.score > 0)
-                      const DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.center,
-                            end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Color(0x77000000)],
+      child: AnimatedScale(
+        scale: pressed
+            ? 0.97
+            : hover
+            ? 1.025
+            : 1,
+        duration: PortalMotion.duration(context, 160),
+        curve: PortalMotion.curve,
+        child: InkWell(
+          key: ValueKey('poster:${item.key}'),
+          onTap: widget.onTap,
+          onHighlightChanged: (value) => setState(() => pressed = value),
+          borderRadius: BorderRadius.circular(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      PortalArtwork(
+                        url: portalPosterUrl(item),
+                        headers: portalHeaders(item),
+                        builder: widget.artwork,
+                      ),
+                      if (item.badge.isNotEmpty ||
+                          widget.showScore && item.score > 0)
+                        const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.center,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.transparent, Color(0x77000000)],
+                            ),
                           ),
                         ),
-                      ),
-                    if (item.badge.isNotEmpty)
-                      Positioned(
-                        left: 8,
-                        bottom: 8,
-                        right: item.score > 0 ? 42 : 8,
-                        child: Text(
-                          item.badge,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                      if (item.badge.isNotEmpty)
+                        Positioned(
+                          left: 8,
+                          bottom: 8,
+                          right: item.score > 0 ? 42 : 8,
+                          child: Text(
+                            item.badge,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                    if (widget.showScore && item.score > 0)
-                      Positioned(
-                        right: 7,
-                        bottom: 6,
-                        child: Tooltip(
-                          message: item.anime != null
-                              ? 'Bangumi 评分'
-                              : '${item.film?.source.name ?? ''}站内评分',
+                      if (widget.showScore && item.score > 0)
+                        Positioned(
+                          right: 7,
+                          bottom: 6,
+                          child: Tooltip(
+                            message: item.anime != null
+                                ? 'Bangumi 评分'
+                                : '${item.film?.source.name ?? ''}站内评分',
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xbf0e1728),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                item.score.toStringAsFixed(1),
+                                style: const TextStyle(
+                                  color: Color(0xffffd55d),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      IgnorePointer(
+                        child: AnimatedOpacity(
+                          opacity: hover ? 1 : 0,
+                          duration: PortalMotion.duration(context, 160),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xbf0e1728),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              item.score.toStringAsFixed(1),
-                              style: const TextStyle(
-                                color: Color(0xffffd55d),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
+                            color: const Color(0x20000000),
+                            child: const Center(
+                              child: Icon(
+                                Icons.play_circle_fill,
+                                color: Colors.white,
+                                size: 44,
                               ),
                             ),
                           ),
                         ),
                       ),
-                    if (hover)
-                      Container(
-                        color: const Color(0x20000000),
-                        child: const Center(
-                          child: Icon(
-                            Icons.play_circle_fill,
-                            color: Colors.white,
-                            size: 44,
-                          ),
-                        ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              item.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                color: hover ? PortalStyle.blue : PortalStyle.ink,
+              const SizedBox(height: 8),
+              Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: hover ? PortalStyle.blue : PortalStyle.ink,
+                ),
               ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              item.subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: PortalStyle.muted, fontSize: 12),
-            ),
-          ],
+              const SizedBox(height: 3),
+              Text(
+                item.subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: PortalStyle.muted, fontSize: 12),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -210,25 +234,30 @@ class PortalHero extends StatefulWidget {
   State<PortalHero> createState() => _PortalHeroState();
 }
 
-class _PortalHeroState extends State<PortalHero> {
+class _PortalHeroState extends State<PortalHero> with WidgetsBindingObserver {
   final pages = PageController();
   Timer? timer;
   int current = 0;
   bool hover = false;
   bool covered = false;
+  bool reduceMotion = false;
+  bool active = true;
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     timer = Timer.periodic(const Duration(seconds: 8), (_) {
       if (mounted &&
           !hover &&
           !covered &&
+          !reduceMotion &&
+          active &&
           pages.hasClients &&
           widget.items.length > 1) {
         pages.animateToPage(
           (current + 1) % widget.items.length,
           duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
+          curve: PortalMotion.curve,
         );
       }
     });
@@ -238,6 +267,24 @@ class _PortalHeroState extends State<PortalHero> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     covered = RouteVisibility.isCoveredOf(context);
+    reduceMotion = MediaQuery.disableAnimationsOf(context);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    active = state == AppLifecycleState.resumed;
+  }
+
+  void _go(int page) {
+    if (reduceMotion) {
+      pages.jumpToPage(page);
+      return;
+    }
+    pages.animateToPage(
+      page,
+      duration: const Duration(milliseconds: 360),
+      curve: PortalMotion.curve,
+    );
   }
 
   @override
@@ -254,6 +301,7 @@ class _PortalHeroState extends State<PortalHero> {
   @override
   void dispose() {
     timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     pages.dispose();
     super.dispose();
   }
@@ -373,15 +421,11 @@ class _PortalHeroState extends State<PortalHero> {
                     message: widget.items[i].title,
                     child: InkWell(
                       key: ValueKey('hero-dot:$i'),
-                      onTap: () => pages.animateToPage(
-                        i,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOut,
-                      ),
+                      onTap: () => _go(i),
                       child: Padding(
                         padding: const EdgeInsets.all(5),
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
+                          duration: PortalMotion.duration(context, 180),
                           width: i == current ? 18 : 7,
                           height: 7,
                           decoration: BoxDecoration(
@@ -405,20 +449,14 @@ class _PortalHeroState extends State<PortalHero> {
                 children: [
                   IconButton(
                     tooltip: '上一张',
-                    onPressed: () => pages.animateToPage(
+                    onPressed: () => _go(
                       (current - 1 + widget.items.length) % widget.items.length,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
                     ),
                     icon: const Icon(Icons.chevron_left, color: Colors.white),
                   ),
                   IconButton(
                     tooltip: '下一张',
-                    onPressed: () => pages.animateToPage(
-                      (current + 1) % widget.items.length,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    ),
+                    onPressed: () => _go((current + 1) % widget.items.length),
                     icon: const Icon(Icons.chevron_right, color: Colors.white),
                   ),
                 ],
@@ -543,7 +581,7 @@ class PortalHistoryTile extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(7),
               child: PortalArtwork(
-                url: history.bangumiItem.images['large'] ?? '',
+                url: portalPosterUrl(PortalItem.fromAnime(history.bangumiItem)),
                 builder: artwork,
               ),
             ),

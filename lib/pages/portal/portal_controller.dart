@@ -66,13 +66,16 @@ class PortalController extends ChangeNotifier {
     bool refresh = false,
   }) async {
     final generation = ++_generation;
-    ++scrollReset;
+    final sameQuery =
+        (category == null || category == this.category) &&
+        (keyword == null || keyword.trim() == this.keyword);
+    if (!sameQuery) ++scrollReset;
     _cancel?.cancel();
     final token = CancelToken();
     _cancel = token;
     if (category != null) this.category = category;
     if (keyword != null) this.keyword = keyword.trim();
-    groups.clear();
+    if (!sameQuery) groups.clear();
     errors.clear();
     loadingMore.clear();
     pending.clear();
@@ -105,7 +108,12 @@ class PortalController extends ChangeNotifier {
         onProgress: next == null
             ? (partial) {
                 if (_disposed || generation != _generation) return;
-                groups[target] = partial;
+                // A refreshing source may initially report no completed rows.
+                // Keep visible content until usable replacements arrive.
+                if (partial.items.isNotEmpty ||
+                    groups[target]?.items.isNotEmpty != true) {
+                  groups[target] = partial;
+                }
                 notifyListeners();
               }
             : null,
@@ -124,6 +132,8 @@ class PortalController extends ChangeNotifier {
           sourceCount: result.sourceCount,
           completedSources: result.completedSources,
           sourceErrors: result.sourceErrors,
+          cachedAt: result.cachedAt,
+          notice: result.notice,
         );
       }
       errors.remove(target);

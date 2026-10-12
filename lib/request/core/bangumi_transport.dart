@@ -27,7 +27,9 @@ class BangumiAccelerationInterceptor extends Interceptor {
     options.extra.remove(_echRequestKey);
     final uri = options.uri;
     if (ApiEndpoints.bangumiPublicApiHosts.contains(uri.host)) {
-      switch (acceleration ?? BangumiAcceleration.current) {
+      switch (options.extra['bangumiForceEch'] == true
+          ? BangumiAcceleration.ech
+          : acceleration ?? BangumiAcceleration.current) {
         case BangumiAcceleration.direct:
           break;
         case BangumiAcceleration.ech:
@@ -35,10 +37,14 @@ class BangumiAccelerationInterceptor extends Interceptor {
           options.queryParameters = {};
           options.extra[_echRequestKey] = true;
         case BangumiAcceleration.mirror:
-          // Source builds lack the private mirror keys. Public upstream APIs
-          // remain usable without them, so do not send unsigned mirror calls.
+          // Source builds lack private mirror keys. Use the authenticated TLS
+          // ECH transport to the public API rather than an unsigned mirror or
+          // a direct connection that may be blocked on the tablet's network.
           if (!(hasMirrorCredentials ?? BangumiMirrorPolicy.hasCredentials) &&
               BangumiMirrorPolicy.requiresSignature(uri, options.method)) {
+            options.path = uri.replace(scheme: 'https').toString();
+            options.queryParameters = {};
+            options.extra[_echRequestKey] = true;
             break;
           }
           options.path =
