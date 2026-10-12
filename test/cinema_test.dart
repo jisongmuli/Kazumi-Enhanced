@@ -59,6 +59,50 @@ class FakeCinemaService extends CinemaService {
 
 void main() {
   test(
+    'search highlight tags and category labels do not change film titles',
+    () {
+      final parsed = CinemaParser.listing(
+        '''
+      <a href="/voddetail/1" title="&lt;em&gt;深海&lt;/em&gt;"><img src="/a.jpg"></a>
+      <div><a href="/voddetail/2" style="background-image:url(/b.jpg)"></a>
+        <h3><a href="/voddetail/2"><span class="info_right">国漫</span>深海</a></h3></div>
+    ''',
+        source,
+        source.url,
+      );
+      expect(parsed.films.map((f) => f.title), ['深海', '深海']);
+    },
+  );
+  test(
+    'published name-based search forms are accepted without matching login forms',
+    () {
+      final form = CinemaParser.searchForm('''
+      <form action="/register"><input name="name"></form>
+      <form id="searchForm" action="/s"><input name="name"></form>
+    ''', source.url);
+      expect(form!.url, 'https://example.com/s');
+      expect(form.keywordKey, 'name');
+    },
+  );
+  test(
+    'stored cinema plugins recover the catalogued search template by address',
+    () async {
+      final service = CinemaService();
+      final stored =
+          CinemaService.plugin(
+              (await service.sources()).firstWhere((s) => s.id == 'fdz_com'),
+            )
+            ..name = '我的饭搭子'
+            ..searchURL = '';
+      final recovered = await service.sourceForPlugin(stored);
+      expect(
+        recovered.searchUrl('深海'),
+        contains('yu-%E6%B7%B1%E6%B5%B7-xianguan'),
+      );
+      expect(recovered.url, stored.baseUrl);
+    },
+  );
+  test(
     'background poster titles are read while article thumbnails are excluded',
     () {
       final page = CinemaParser.listing(

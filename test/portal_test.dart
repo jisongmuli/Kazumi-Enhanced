@@ -74,6 +74,7 @@ class FakeCatalog implements PortalCatalog {
     String? next,
     bool refresh = false,
     CancelToken? cancelToken,
+    ValueChanged<PortalListing>? onProgress,
   }) async {
     requests.add((category: category, keyword: keyword, next: next));
     if (cancelToken != null) cancellations.add(cancelToken);
@@ -150,6 +151,52 @@ class FakeCinema extends CinemaService {
         ),
       ],
     );
+  }
+}
+
+class MultiCinema extends CinemaService {
+  final calls = <String>[];
+  int active = 0;
+  int peak = 0;
+  @override
+  Future<List<CinemaSource>> sources() async => [
+    for (var i = 0; i < 9; i++)
+      CinemaSource(id: '$i', name: '来源$i', url: 'https://site$i.example/'),
+  ];
+  @override
+  Future<CinemaListing> listing(
+    CinemaSource source, {
+    String keyword = '',
+    String? pageUrl,
+    CancelToken? cancelToken,
+    bool refresh = false,
+  }) async {
+    calls.add('${source.id}:${pageUrl ?? keyword}');
+    active++;
+    if (active > peak) peak = active;
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+      if (source.id == '8' || (pageUrl != null && source.id == '1')) {
+        throw StateError('网站需要验证');
+      }
+      return CinemaListing(
+        films: source.id == '0'
+            ? []
+            : [
+                CinemaFilm(
+                  source: source,
+                  title: '$keyword影片',
+                  url: '${source.url}detail/${pageUrl == null ? 1 : 2}',
+                  poster: '',
+                ),
+              ],
+        nextUrl: source.id == '0' || pageUrl != null
+            ? null
+            : '${source.url}page/2',
+      );
+    } finally {
+      active--;
+    }
   }
 }
 
@@ -267,6 +314,38 @@ void main() {
       cinema.visited.clear();
       await catalog.fetch(PortalCategory.documentary);
       expect(cinema.visited.single, 'https://example.com/type/3');
+    },
+  );
+  test(
+    'cinema search queries all sites and preserves partial successes with six workers',
+    () async {
+      final cinema = MultiCinema();
+      final progress = <PortalListing>[];
+      final catalog = LivePortalCatalog(cinema: cinema);
+      final result = await catalog.fetch(
+        PortalCategory.cinema,
+        keyword: '深海',
+        onProgress: progress.add,
+      );
+      expect(cinema.calls.length, 9);
+      expect(cinema.peak, 6);
+      expect(result.items.length, 7);
+      expect(result.sourceCount, 9);
+      expect(result.completedSources, 9);
+      expect(result.sourceErrors.keys, ['来源8']);
+      expect(progress.length, 9);
+      expect(
+        progress.any((p) => p.completedSources < 9 && p.items.isNotEmpty),
+        isTrue,
+      );
+      final nextPage = await catalog.fetch(
+        PortalCategory.cinema,
+        keyword: '深海',
+        next: result.next,
+      );
+      expect(nextPage.items.length, 6);
+      expect(nextPage.sourceErrors.keys, ['来源1']);
+      expect(nextPage.next, isNull);
     },
   );
   test(
@@ -446,7 +525,7 @@ void main() {
     await controller.load();
     await tester.pumpWidget(testApp(controller, repo, play: played.add));
     await tester.tap(find.byKey(const ValueKey('hero-dot:1')));
-      await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('hero-play:anime:2')));
     expect(played.single.anime!.id, 2);
     await tester.pumpWidget(const SizedBox());

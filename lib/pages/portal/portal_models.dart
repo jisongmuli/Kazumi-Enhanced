@@ -98,9 +98,18 @@ class PortalItem {
 }
 
 class PortalListing {
-  const PortalListing(this.items, {this.next});
+  const PortalListing(
+    this.items, {
+    this.next,
+    this.sourceCount = 0,
+    this.completedSources = 0,
+    this.sourceErrors = const {},
+  });
   final List<PortalItem> items;
   final String? next;
+  final int sourceCount;
+  final int completedSources;
+  final Map<String, String> sourceErrors;
 }
 
 String portalTime(Duration time) {

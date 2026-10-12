@@ -659,6 +659,14 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
           '${controller.items.length} 项内容',
           style: const TextStyle(color: PortalStyle.muted, fontSize: 13),
         ),
+        if (controller.groups[PortalCategory.cinema]
+            case final PortalListing listing)
+          if (listing.sourceCount > 0)
+            Text(
+              '${listing.completedSources}/${listing.sourceCount} 个影视来源已检索'
+              '${listing.sourceErrors.isEmpty ? "" : " · ${listing.sourceErrors.length} 个需重试或在原站访问"}',
+              style: const TextStyle(color: PortalStyle.muted, fontSize: 13),
+            ),
         if (controller.keyword.isNotEmpty)
           TextButton.icon(
             key: const ValueKey('portal-clear-search'),
@@ -678,7 +686,8 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
           label: const Text('刷新'),
         ),
         if (controller.channel == PortalChannel.cinema ||
-            controller.category == PortalCategory.cinema)
+            controller.category == PortalCategory.cinema ||
+            controller.keyword.isNotEmpty)
           TextButton.icon(
             onPressed: _library,
             icon: const Icon(Icons.dns_outlined, size: 18),

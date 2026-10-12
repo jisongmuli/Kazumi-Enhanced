@@ -8,6 +8,11 @@ import 'package:kazumi/services/cinema/cinema_parser.dart';
 import 'package:kazumi/utils/http_headers.dart';
 import 'package:kazumi/services/video_source/video_source_service.dart';
 
+class CinemaVerificationRequired extends StateError {
+  CinemaVerificationRequired(this.url) : super('该片源需要浏览器验证，请打开原站完成验证');
+  final String url;
+}
+
 class CinemaService {
   CinemaService({Dio? dio}) : _dioOverride = dio;
   final Dio? _dioOverride;
@@ -30,7 +35,37 @@ class CinemaService {
     ..version = '1.0'
     ..baseUrl = source.url
     ..referer = source.url
+    ..searchURL = source.searchTemplate == null
+        ? source.url
+        : Uri.parse(source.url)
+              .resolve(
+                source.searchTemplate!.replaceAll('{keyword}', '@keyword'),
+              )
+              .toString()
     ..useWebview = true;
+
+  /// Resolve the stored rule against the catalogue by address, preserving
+  /// published search templates without replacing any user-managed address.
+  Future<CinemaSource> sourceForPlugin(Plugin plugin) async {
+    final address = Uri.tryParse(plugin.baseUrl);
+    for (final source in await sources()) {
+      final candidate = Uri.parse(source.url);
+      if (address != null &&
+          candidate.host == address.host &&
+          candidate.path.replaceAll(RegExp(r'/+$'), '') ==
+              address.path.replaceAll(RegExp(r'/+$'), '')) {
+        return source;
+      }
+    }
+    return CinemaSource(
+      id: plugin.name,
+      name: plugin.name.replaceFirst('影视 · ', ''),
+      url: plugin.baseUrl,
+      searchTemplate: plugin.searchURL.contains('@keyword')
+          ? plugin.searchURL.replaceAll('@keyword', '{keyword}')
+          : null,
+    );
+  }
 
   Future<({String markup, String url})> _get(
     String url, {
@@ -58,7 +93,7 @@ class CinemaService {
     if (RegExp(
       r'浏览器安全验证|请输入验证码|请先完成验证|Protected by cdndefend|Just a moment|Checking your browser',
     ).hasMatch(markup)) {
-      throw StateError('该片源需要浏览器验证，请打开原站完成验证');
+      throw CinemaVerificationRequired(response.realUri.toString());
     }
     return (markup: markup, url: response.realUri.toString());
   }
@@ -74,22 +109,27 @@ class CinemaService {
     if (pageUrl != null) {
       page = await _get(pageUrl, cancelToken: cancelToken);
     } else {
-      var home = refresh ? null : _home[source.id];
-      home ??= await _get(source.url, cancelToken: cancelToken);
-      _home[source.id] = home;
-      if (keyword.trim().isEmpty) {
-        page = home;
-      } else if (source.searchUrl(keyword) case final String url) {
-        page = await _get(url, cancelToken: cancelToken);
+      final searchUrl = keyword.trim().isEmpty
+          ? null
+          : source.searchUrl(keyword);
+      if (searchUrl != null) {
+        page = await _get(searchUrl, cancelToken: cancelToken);
       } else {
-        final form = CinemaParser.searchForm(home.markup, home.url);
-        if (form == null) throw StateError('暂未识别该片源的搜索接口，可在原站搜索');
-        page = await _get(
-          form.url,
-          method: form.method,
-          fields: {...form.fields, form.keywordKey: keyword.trim()},
-          cancelToken: cancelToken,
-        );
+        var home = refresh ? null : _home[source.id];
+        home ??= await _get(source.url, cancelToken: cancelToken);
+        _home[source.id] = home;
+        if (keyword.trim().isEmpty) {
+          page = home;
+        } else {
+          final form = CinemaParser.searchForm(home.markup, home.url);
+          if (form == null) throw StateError('暂未识别该片源的搜索接口，可在原站搜索');
+          page = await _get(
+            form.url,
+            method: form.method,
+            fields: {...form.fields, form.keywordKey: keyword.trim()},
+            cancelToken: cancelToken,
+          );
+        }
       }
     }
     final listing = CinemaParser.listing(page.markup, source, page.url);
@@ -138,13 +178,9 @@ class CinemaService {
     Plugin plugin,
     String url, {
     CancelToken? cancelToken,
-  }) => detail(
+  }) async => detail(
     CinemaFilm(
-      source: CinemaSource(
-        id: plugin.name,
-        name: plugin.name.replaceFirst('影视 · ', ''),
-        url: plugin.baseUrl,
-      ),
+      source: await sourceForPlugin(plugin),
       title: '',
       url: url,
       poster: '',

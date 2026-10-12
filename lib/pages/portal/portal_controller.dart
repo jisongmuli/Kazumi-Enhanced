@@ -102,6 +102,13 @@ class PortalController extends ChangeNotifier {
         next: next,
         refresh: refresh,
         cancelToken: token,
+        onProgress: next == null
+            ? (partial) {
+                if (_disposed || generation != _generation) return;
+                groups[target] = partial;
+                notifyListeners();
+              }
+            : null,
       );
       if (_disposed || generation != _generation) return;
       if (next == null) {
@@ -114,6 +121,9 @@ class PortalController extends ChangeNotifier {
         groups[target] = PortalListing(
           unique.values.toList(),
           next: result.next,
+          sourceCount: result.sourceCount,
+          completedSources: result.completedSources,
+          sourceErrors: result.sourceErrors,
         );
       }
       errors.remove(target);

@@ -7,7 +7,6 @@ import 'package:kazumi/services/plugin/api_rule_engine.dart';
 import 'package:kazumi/utils/episode_url.dart';
 import 'package:kazumi/utils/http_headers.dart';
 import 'package:kazumi/services/video_source/youtube_source_service.dart';
-import 'package:kazumi/services/cinema/cinema_models.dart';
 import 'package:kazumi/services/cinema/cinema_service.dart';
 
 export 'package:kazumi/services/plugin/rule_engine_models.dart'
@@ -247,7 +246,7 @@ class Plugin {
       if (isCinema) {
         try {
           final result = await CinemaService.instance.listing(
-            CinemaSource(id: name, name: name, url: baseUrl),
+            await CinemaService.instance.sourceForPlugin(this),
             keyword: keyword,
             cancelToken: cancelToken,
           );
@@ -260,6 +259,8 @@ class Plugin {
           );
         } on NoResultException {
           rethrow;
+        } on CinemaVerificationRequired {
+          throw CaptchaRequiredException(name);
         } catch (error) {
           throw SearchErrorException(name, cause: error);
         }

@@ -121,6 +121,15 @@ class CinemaParser {
   static String _text(String? value) =>
       (value ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
 
+  static String _titleText(Element? element) {
+    if (element == null) return '';
+    var title = element.text;
+    for (final badge in element.querySelectorAll('.info_right, .tag, .badge')) {
+      title = title.replaceFirst(badge.text, '');
+    }
+    return _text(title);
+  }
+
   static String? _image(Element anchor) {
     for (final element in [anchor, ...anchor.querySelectorAll('img')]) {
       for (final key in [
@@ -184,8 +193,8 @@ class CinemaParser {
       if (title.isEmpty)
         title = _text(anchor.querySelector('img')?.attributes['alt']);
       if (title.isEmpty)
-        title = _text(
-          anchor.querySelector('.vodlist_title, .vodlist-title')?.text,
+        title = _titleText(
+          anchor.querySelector('.vodlist_title, .vodlist-title'),
         );
       var parent = anchor.parent;
       for (
@@ -193,14 +202,15 @@ class CinemaParser {
         title.isEmpty && parent != null && i < 3;
         i++, parent = parent.parent
       ) {
-        title = _text(
-          parent
-              .querySelector(
-                'h3, h4, .title, .module-poster-item-title, .public-list-name, .movie-title, .vodlist_title, .vodlist-title',
-              )
-              ?.text,
+        title = _titleText(
+          parent.querySelector(
+            'h3, h4, .title, .module-poster-item-title, .public-list-name, .movie-title, .vodlist_title, .vodlist-title',
+          ),
         );
       }
+      // Search highlighting is sometimes embedded in an escaped title/alt
+      // attribute. Treat it as text, as the site's browser view does.
+      title = _text(html.parseFragment(title).text);
       if (title.isEmpty || title == source.name || title.length > 180) continue;
       final badge = _text(
         anchor
@@ -285,9 +295,19 @@ class CinemaParser {
   static CinemaSearchForm? searchForm(String markup, String base) {
     final document = html.parse(markup);
     for (final form in document.querySelectorAll('form')) {
-      final input = form.querySelector(
-        'input[name="wd"], input[name="searchword"], input[name="keyword"], input[name="q"]',
-      );
+      final input =
+          form.querySelector(
+            'input[name="wd"], input[name="searchword"], input[name="keyword"], input[name="q"]',
+          ) ??
+          (form.id.toLowerCase().contains('search') ||
+                  (form.attributes['action'] ?? '').contains('search') ||
+                  RegExp(
+                    r'^/s(?:\.html)?$',
+                  ).hasMatch(form.attributes['action'] ?? '')
+              ? form.querySelector(
+                  'input[name="name"], input[type="search"][name]',
+                )
+              : null);
       if (input == null) continue;
       final url = absoluteUrl(base, form.attributes['action'] ?? base);
       if (url == null || Uri.parse(url).host != Uri.parse(base).host) continue;

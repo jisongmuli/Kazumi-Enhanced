@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:kazumi/pages/portal/portal_models.dart';
 import 'package:kazumi/request/apis/bangumi_api.dart';
 import 'package:kazumi/services/cinema/cinema_models.dart';
@@ -21,6 +23,7 @@ abstract class PortalCatalog {
     String? next,
     bool refresh = false,
     CancelToken? cancelToken,
+    ValueChanged<PortalListing>? onProgress,
   });
 }
 
@@ -57,6 +60,7 @@ class LivePortalCatalog implements PortalCatalog {
     String? next,
     bool refresh = false,
     CancelToken? cancelToken,
+    ValueChanged<PortalListing>? onProgress,
   }) async {
     final key = '${category.name}:$keyword:$next';
     final cached = _cache[key];
@@ -97,7 +101,14 @@ class LivePortalCatalog implements PortalCatalog {
         next: page.rawCount >= 20 ? '${offset + page.rawCount}' : null,
       );
     } else {
-      result = await _films(category, keyword, next, refresh, cancelToken);
+      result = await _films(
+        category,
+        keyword,
+        next,
+        refresh,
+        cancelToken,
+        onProgress,
+      );
     }
     if (cancelToken?.isCancelled != true) {
       if (_cache.length > 100) _cache.clear();
@@ -121,30 +132,18 @@ class LivePortalCatalog implements PortalCatalog {
     String? next,
     bool refresh,
     CancelToken? cancelToken,
+    ValueChanged<PortalListing>? onProgress,
   ) async {
-    final sources = await cinema.sources();
-    if (next != null) {
-      final cursors = (jsonDecode(next) as List).cast<Map>();
-      final pages = await Future.wait(
-        cursors.map((cursor) async {
-          final source = sources.firstWhere((s) => s.id == cursor['source']);
-          final url = cursor['url'] as String;
-          if (Uri.parse(url).host != Uri.parse(source.url).host) {
-            throw StateError('分页地址无效');
-          }
-          return (
-            source: source,
-            listing: await cinema.listing(
-              source,
-              pageUrl: url,
-              cancelToken: cancelToken,
-            ),
-          );
-        }),
-      );
-      return _combine(pages);
-    }
-    if (category == PortalCategory.shorts) {
+    final allSources = await cinema.sources();
+    final cursors = next == null
+        ? <Map>[]
+        : (jsonDecode(next) as List).cast<Map>();
+    final sources = next == null
+        ? allSources
+        : allSources
+              .where((s) => cursors.any((cursor) => cursor['source'] == s.id))
+              .toList();
+    if (category == PortalCategory.shorts && next == null) {
       final source = sources.firstWhere((s) => s.id == 'hongguo_official');
       return _combine([
         (
@@ -158,97 +157,158 @@ class LivePortalCatalog implements PortalCatalog {
         ),
       ]);
     }
-    Object? lastError;
-    for (final id in ['libvio_cam', 'fdz_com', 'libvio_lat', 'libvio_bid']) {
+    final pagesByIndex =
+        <int, List<({CinemaSource source, CinemaListing listing})>>{};
+    final failures = <String, String>{};
+    var index = 0;
+    var completed = 0;
+    PortalListing snapshot() {
+      final pages = [
+        for (var i = 0; i < sources.length; i++) ...?pagesByIndex[i],
+      ];
+      final combined = _combine(pages);
+      return PortalListing(
+        combined.items,
+        next: combined.next,
+        sourceCount: sources.length,
+        completedSources: completed,
+        sourceErrors: Map.unmodifiable(failures),
+      );
+    }
+
+    Future<void> query(
+      CinemaSource source,
+      int sourceIndex,
+      CancelToken token,
+    ) async {
       if (cancelToken?.isCancelled == true) throw StateError('请求已取消');
-      final source = sources.where((s) => s.id == id).firstOrNull;
-      if (source == null) continue;
-      try {
-        if (keyword.isNotEmpty) {
-          return _combine([
-            (
-              source: source,
-              listing: await cinema.listing(
-                source,
-                keyword: keyword,
-                cancelToken: cancelToken,
-                refresh: refresh,
-              ),
+      if (next != null) {
+        final pages = <({CinemaSource source, CinemaListing listing})>[];
+        for (final cursor in cursors.where((c) => c['source'] == source.id)) {
+          final url = cursor['url'] as String;
+          if (Uri.parse(url).host != Uri.parse(source.url).host) {
+            throw StateError('分页地址无效');
+          }
+          pages.add((
+            source: source,
+            listing: await cinema.listing(
+              source,
+              pageUrl: url,
+              cancelToken: token,
             ),
-          ]);
+          ));
         }
-        final links = await cinema.categoryLinks(
-          source,
-          cancelToken: cancelToken,
-        );
-        final kind = switch (category) {
-          PortalCategory.chineseSeries || PortalCategory.foreignSeries => '电视剧',
-          PortalCategory.documentary => '纪录片',
-          PortalCategory.variety => '综艺',
-          _ => '电影',
-        };
-        final base = links[kind];
-        if (base == null) throw StateError('此站尚未公布$kind分类');
-        final List<String> urls;
-        if (category == PortalCategory.chineseFilm ||
-            category == PortalCategory.foreignFilm) {
-          final areas = await cinema.categoryLinks(
-            source,
-            pageUrl: base,
-            cancelToken: cancelToken,
-          );
-          final names = category == PortalCategory.chineseFilm
-              ? ['大陆', '香港', '台湾']
-              : ['美国', '英国', '日本', '韩国'];
-          urls = names
-              .map((name) => areas[name])
-              .whereType<String>()
-              .toSet()
-              .toList();
-          if (urls.isEmpty) throw StateError('此站尚未公布地区筛选入口');
-        } else if (category == PortalCategory.chineseSeries) {
-          final seriesLinks = await cinema.categoryLinks(
-            source,
-            pageUrl: base,
-            cancelToken: cancelToken,
-          );
-          urls = [seriesLinks['国产剧'] ?? (throw StateError('此站未公布国产剧分类'))];
-        } else if (category == PortalCategory.foreignSeries) {
-          final seriesLinks = await cinema.categoryLinks(
-            source,
-            pageUrl: base,
-            cancelToken: cancelToken,
-          );
-          urls = ['欧美剧', '日韩剧', '日本剧', '韩国剧']
-              .map((name) => seriesLinks[name])
-              .whereType<String>()
-              .toSet()
-              .toList();
-          if (urls.isEmpty) throw StateError('此站未公布海外剧集分类');
-        } else {
-          urls = [base];
-        }
-        final pages = await Future.wait(
-          urls.map(
-            (url) async => (
-              source: source,
-              listing: await cinema.listing(
-                source,
-                pageUrl: url,
-                cancelToken: cancelToken,
-              ),
+        pagesByIndex[sourceIndex] = pages;
+        return;
+      }
+      if (keyword.isNotEmpty || category == PortalCategory.cinema) {
+        pagesByIndex[sourceIndex] = [
+          (
+            source: source,
+            listing: await cinema.listing(
+              source,
+              keyword: keyword,
+              cancelToken: token,
+              refresh: refresh,
             ),
           ),
+        ];
+        return;
+      }
+      final links = await cinema.categoryLinks(source, cancelToken: token);
+      final kind = switch (category) {
+        PortalCategory.chineseSeries || PortalCategory.foreignSeries => '电视剧',
+        PortalCategory.documentary => '纪录片',
+        PortalCategory.variety => '综艺',
+        _ => '电影',
+      };
+      final base = links[kind];
+      if (base == null) throw StateError('此站尚未公布$kind分类');
+      final List<String> urls;
+      if (category == PortalCategory.chineseFilm ||
+          category == PortalCategory.foreignFilm) {
+        final areas = await cinema.categoryLinks(
+          source,
+          pageUrl: base,
+          cancelToken: token,
         );
-        return _combine(pages);
-      } catch (error) {
-        if (cancelToken?.isCancelled == true) rethrow;
-        lastError = error;
+        final names = category == PortalCategory.chineseFilm
+            ? ['大陆', '香港', '台湾']
+            : ['美国', '英国', '日本', '韩国'];
+        urls = names
+            .map((name) => areas[name])
+            .whereType<String>()
+            .toSet()
+            .toList();
+        if (urls.isEmpty) throw StateError('此站尚未公布地区筛选入口');
+      } else if (category == PortalCategory.chineseSeries) {
+        final seriesLinks = await cinema.categoryLinks(
+          source,
+          pageUrl: base,
+          cancelToken: token,
+        );
+        urls = [seriesLinks['国产剧'] ?? (throw StateError('此站未公布国产剧分类'))];
+      } else if (category == PortalCategory.foreignSeries) {
+        final seriesLinks = await cinema.categoryLinks(
+          source,
+          pageUrl: base,
+          cancelToken: token,
+        );
+        urls = [
+          '欧美剧',
+          '日韩剧',
+          '日本剧',
+          '韩国剧',
+        ].map((name) => seriesLinks[name]).whereType<String>().toSet().toList();
+        if (urls.isEmpty) throw StateError('此站未公布海外剧集分类');
+      } else {
+        urls = [base];
+      }
+      final pages = await Future.wait(
+        urls.map(
+          (url) async => (
+            source: source,
+            listing: await cinema.listing(
+              source,
+              pageUrl: url,
+              cancelToken: token,
+            ),
+          ),
+        ),
+      );
+      pagesByIndex[sourceIndex] = pages;
+    }
+
+    Future<void> worker() async {
+      while (index < sources.length && cancelToken?.isCancelled != true) {
+        final current = index++;
+        final source = sources[current];
+        final token = CancelToken();
+        cancelToken?.whenCancel.then((_) => token.cancel());
+        try {
+          await query(source, current, token).timeout(
+            const Duration(seconds: 40),
+            onTimeout: () {
+              token.cancel();
+              throw TimeoutException('片源读取超时');
+            },
+          );
+        } catch (error) {
+          if (cancelToken?.isCancelled == true) rethrow;
+          failures[source.name] = error is StateError
+              ? error.message
+              : '连接失败或超时';
+        }
+        completed++;
+        if (cancelToken?.isCancelled != true) onProgress?.call(snapshot());
       }
     }
-    throw StateError(
-      '影视目录暂时无法读取，可重试或在“片源目录”选择其他站点。${lastError is StateError ? ' ${lastError.message}' : ''}',
+
+    await Future.wait(
+      List.generate(sources.length < 6 ? sources.length : 6, (_) => worker()),
     );
+    if (cancelToken?.isCancelled == true) throw StateError('请求已取消');
+    return snapshot();
   }
 
   PortalListing _combine(

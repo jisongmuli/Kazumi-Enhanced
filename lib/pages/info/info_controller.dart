@@ -31,6 +31,8 @@ abstract class _InfoController with Store {
   @observable
   var pluginSearchStatus = ObservableMap<String, PluginSearchStatus>();
 
+  final pluginSearchErrors = ObservableMap<String, String>();
+
   @observable
   var commentsList = ObservableList<CommentItem>();
 
@@ -81,8 +83,10 @@ abstract class _InfoController with Store {
       await collectController.updateLocalCollect(bangumiItem);
       return true;
     } catch (e) {
-      KazumiLogger()
-          .e('InfoController: failed to fill interest user profile', error: e);
+      KazumiLogger().e(
+        'InfoController: failed to fill interest user profile',
+        error: e,
+      );
       return false;
     } finally {
       _isFillingInterestUserProfile = false;
@@ -134,8 +138,9 @@ abstract class _InfoController with Store {
       } else if (previousInterest == null || !previousInterest.hasUserProfile) {
         bangumiItem.interest = incomingInterest;
       } else {
-        bangumiItem.interest =
-            incomingInterest.copyWithUser(user: previousInterest.user);
+        bangumiItem.interest = incomingInterest.copyWithUser(
+          user: previousInterest.user,
+        );
       }
     }
     await collectController.updateLocalCollect(bangumiItem);
@@ -172,7 +177,8 @@ abstract class _InfoController with Store {
       _removeCurrentUserFromPublicComments();
     });
     KazumiLogger().i(
-        'InfoController: loaded comments list length ${commentsList.length}, offset $_commentsOffset');
+      'InfoController: loaded comments list length ${commentsList.length}, offset $_commentsOffset',
+    );
   }
 
   Future<void> refreshBangumiCommentsSilently(int id) async {
@@ -191,11 +197,7 @@ abstract class _InfoController with Store {
     await BangumiApi.getCharatersByBangumiID(id).then((value) {
       characterList.addAll(value.charactersList);
     });
-    Map<String, int> relationValue = {
-      '主角': 1,
-      '配角': 2,
-      '客串': 3,
-    };
+    Map<String, int> relationValue = {'主角': 1, '配角': 2, '客串': 3};
 
     try {
       characterList.sort((a, b) {
@@ -207,7 +209,8 @@ abstract class _InfoController with Store {
       KazumiDialog.showToast(message: '$e');
     }
     KazumiLogger().i(
-        'InfoController: loaded character list length ${characterList.length}');
+      'InfoController: loaded character list length ${characterList.length}',
+    );
   }
 
   Future<void> queryBangumiStaffsByID(int id) async {
@@ -215,8 +218,9 @@ abstract class _InfoController with Store {
     await BangumiApi.getBangumiStaffByID(id).then((value) {
       staffList.addAll(value.data);
     });
-    KazumiLogger()
-        .i('InfoController: loaded staff list length ${staffList.length}');
+    KazumiLogger().i(
+      'InfoController: loaded staff list length ${staffList.length}',
+    );
   }
 
   @action
@@ -268,8 +272,10 @@ abstract class _InfoController with Store {
       requestGeneration == _relationRequestGeneration &&
       bangumiItem.id == subjectId;
 
-  Future<bool> rateBangumi(BangumiReview review,
-      {required int localType}) async {
+  Future<bool> rateBangumi(
+    BangumiReview review, {
+    required int localType,
+  }) async {
     final updated = await BangumiApi.addOrUpdateBangumiEvaluationBySubjectID(
       bangumiItem.id,
       localType,

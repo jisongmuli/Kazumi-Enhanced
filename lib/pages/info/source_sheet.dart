@@ -25,6 +25,7 @@ import 'package:kazumi/services/plugin/captcha_verification_service.dart';
 import 'package:kazumi/services/plugin/plugin_search_service.dart';
 import 'package:kazumi/services/plugin/rule_engine_models.dart'
     show RuleCancelToken;
+import 'package:kazumi/services/cinema/cinema_service.dart';
 import 'package:kazumi/utils/device.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -101,15 +102,22 @@ class _SourceSheetState extends State<SourceSheet> with KazumiDialogOwner {
 
   Future<void> _openInBrowser(String name) async {
     final plugin = _pluginFor(name);
-    final targetUrl = plugin.usesApiSearch
+    final cinemaSource = plugin.isCinema
+        ? await CinemaService.instance.sourceForPlugin(plugin)
+        : null;
+    final targetUrl = cinemaSource != null
+        ? cinemaSource.searchUrl(_keywordFor(name)) ?? cinemaSource.url
+        : plugin.usesApiSearch
         ? plugin.baseUrl
         : plugin.searchURL.replaceAll(
             '@keyword',
             Uri.encodeQueryComponent(_keywordFor(name)),
           );
     try {
-      if (await launchUrl(Uri.parse(targetUrl),
-          mode: LaunchMode.externalApplication)) {
+      if (await launchUrl(
+        Uri.parse(targetUrl),
+        mode: LaunchMode.externalApplication,
+      )) {
         return;
       }
     } catch (error) {
@@ -121,17 +129,21 @@ class _SourceSheetState extends State<SourceSheet> with KazumiDialogOwner {
   Future<void> _openSearchItem(String name, SearchItem searchItem) async {
     if (dialogs.isRunning) return;
     final plugin = _pluginFor(name);
-    await dialogs.run((task) async {
-      final cancelToken = RuleCancelToken();
-      final roads = await task.loading(
-        message: '正在获取播放列表',
-        barrierDismissible: isDesktop(),
-        onCancel: cancelToken.cancel,
-        action: () =>
-            plugin.queryChapterRoads(searchItem.src, cancelToken: cancelToken),
-      );
-      if (roads.isEmpty) throw ChapterErrorException(plugin.name);
-      task.withContext((context) => context.pushNamed(
+    await dialogs.run(
+      (task) async {
+        final cancelToken = RuleCancelToken();
+        final roads = await task.loading(
+          message: '正在获取播放列表',
+          barrierDismissible: isDesktop(),
+          onCancel: cancelToken.cancel,
+          action: () => plugin.queryChapterRoads(
+            searchItem.src,
+            cancelToken: cancelToken,
+          ),
+        );
+        if (roads.isEmpty) throw ChapterErrorException(plugin.name);
+        task.withContext(
+          (context) => context.pushNamed(
             '/video/',
             arguments: OnlineVideoPlaybackArgs(
               bangumiItem: widget.infoController.bangumiItem,
@@ -140,13 +152,18 @@ class _SourceSheetState extends State<SourceSheet> with KazumiDialogOwner {
               src: searchItem.src,
               roads: roads,
             ),
-          ));
-    }, onError: (error, stackTrace) {
-      KazumiLogger().w('SourceSheet: failed to query playlist', error: error);
-      KazumiDialog.showToast(message: plugin.isYoutube && error is ChapterErrorException
-          ? '未能获取 YouTube 播放列表：${error.cause}'
-          : '未能获取播放列表，请重试或选择其他结果');
-    });
+          ),
+        );
+      },
+      onError: (error, stackTrace) {
+        KazumiLogger().w('SourceSheet: failed to query playlist', error: error);
+        KazumiDialog.showToast(
+          message: plugin.isYoutube && error is ChapterErrorException
+              ? '未能获取 YouTube 播放列表：${error.cause}'
+              : '未能获取播放列表，请重试或选择其他结果',
+        );
+      },
+    );
   }
 
   void _showAliasPicker(String pluginName) {
@@ -158,65 +175,89 @@ class _SourceSheetState extends State<SourceSheet> with KazumiDialogOwner {
       sourceName: pluginName,
       aliases: widget.infoController.bangumiItem.alias,
       onAliasSelected: (alias) => _querySource(alias, pluginName),
-      onAliasesChanged: () => _collectController
-          .updateLocalCollect(widget.infoController.bangumiItem),
+      onAliasesChanged: () => _collectController.updateLocalCollect(
+        widget.infoController.bangumiItem,
+      ),
     );
   }
 
   void _showCustomKeyword(String pluginName) => _showCustomKeywordDialog(
-        initialKeyword: _keywordFor(pluginName),
-        sourceName: pluginName,
-        onSubmit: (keyword) {
-          final item = widget.infoController.bangumiItem;
-          if (!item.alias.contains(keyword)) {
-            item.alias.add(keyword);
-            _collectController.updateLocalCollect(item);
-          }
-          _querySource(keyword, pluginName);
-        },
-      );
+    initialKeyword: _keywordFor(pluginName),
+    sourceName: pluginName,
+    onSubmit: (keyword) {
+      final item = widget.infoController.bangumiItem;
+      if (!item.alias.contains(keyword)) {
+        item.alias.add(keyword);
+        _collectController.updateLocalCollect(item);
+      }
+      _querySource(keyword, pluginName);
+    },
+  );
 
   @override
   Widget build(BuildContext context) => Observer(
-        builder: (context) {
-          // Snapshot observable values here; lazy list builders are not tracked.
-          final groupsByName = {
-            for (final plugin in _pluginsController.pluginList)
-              if (!plugin.isCinema)
-              plugin.name: _SourceSearchGroup(
-                name: plugin.name,
-                keyword: _keywordFor(plugin.name),
-                status: widget.infoController.pluginSearchStatus[plugin.name] ??
-                    PluginSearchStatus.pending,
-                results: <SearchItem>[],
-              ),
-          };
-          final seenBySource = <String, Set<String>>{};
-          String? firstResultSource;
-          // Responses follow completion order; groups keep configured order.
-          for (final response
-              in widget.infoController.pluginSearchResponseList) {
-            final group = groupsByName[response.pluginName];
-            if (group == null) continue;
-            final seen = seenBySource.putIfAbsent(group.name, () => <String>{});
-            for (final result in response.data) {
-              if (seen.add(result.src)) group.results.add(result);
-            }
-            if (group.hasResults) firstResultSource ??= group.name;
+    builder: (context) {
+      // Snapshot observable values here; lazy list builders are not tracked.
+      final groupsByName = {
+        for (final plugin in _pluginsController.pluginList)
+          plugin.name: SourceSearchGroup(
+            name: plugin.name,
+            type: plugin.type,
+            error: widget.infoController.pluginSearchErrors[plugin.name],
+            keyword: _keywordFor(plugin.name),
+            status:
+                widget.infoController.pluginSearchStatus[plugin.name] ??
+                PluginSearchStatus.pending,
+            results: <SearchItem>[],
+          ),
+      };
+      final seenBySource = <String, Set<String>>{};
+      String? firstResultSource;
+      // Responses follow completion order; groups keep configured order.
+      for (final response in widget.infoController.pluginSearchResponseList) {
+        final group = groupsByName[response.pluginName];
+        if (group == null) continue;
+        final seen = seenBySource.putIfAbsent(group.name, () => <String>{});
+        for (final result in response.data) {
+          if (seen.add(result.src)) group.results.add(result);
+        }
+        final exact = group.results
+            .where(
+              (item) =>
+                  item.name.trim().toLowerCase() ==
+                  group.keyword.trim().toLowerCase(),
+            )
+            .toList();
+        if (exact.isNotEmpty) {
+          final remaining = group.results
+              .where((item) => !exact.contains(item))
+              .toList();
+          group.results
+            ..clear()
+            ..addAll(exact)
+            ..addAll(remaining);
+        }
+        if (group.hasResults) firstResultSource ??= group.name;
+      }
+      return SourceSheetView(
+        keyword: _keyword,
+        groups: groupsByName.values.toList(),
+        firstResultSource: firstResultSource,
+        onSourceSearch: _showCustomKeyword,
+        onSourceAliasSearch: _showAliasPicker,
+        onRetry: _retry,
+        onVerify: (name) {
+          final plugin = _pluginFor(name);
+          if (plugin.isCinema) {
+            _openInBrowser(name);
+          } else {
+            _captchaFlow.start(plugin, _keywordFor(name));
           }
-          return _SourceSheetView(
-            keyword: _keyword,
-            groups: groupsByName.values.toList(),
-            firstResultSource: firstResultSource,
-            onSourceSearch: _showCustomKeyword,
-            onSourceAliasSearch: _showAliasPicker,
-            onRetry: _retry,
-            onVerify: (name) =>
-                _captchaFlow.start(_pluginFor(name), _keywordFor(name)),
-            onOpenBrowser: _openInBrowser,
-            onPlay: _openSearchItem,
-            onClose: () => Navigator.of(context).pop(),
-          );
         },
+        onOpenBrowser: _openInBrowser,
+        onPlay: _openSearchItem,
+        onClose: () => Navigator.of(context).pop(),
       );
+    },
+  );
 }
