@@ -58,8 +58,14 @@ class DanmakuApi {
     if (bangumiID == 0) {
       return [];
     }
-    if (!await _client.usesOfficial) {
+    if (bangumiID < 0 || !await _client.usesOfficial) {
       final response = await getDanDanEpisodesByDanDanBangumiID(bangumiID);
+      if (bangumiID < 0) {
+        final match = response.episodes
+            .where((e) => e.episodeNumber == episode)
+            .firstOrNull;
+        return match == null ? [] : getDanDanmakuByEpisodeID(match.episodeId);
+      }
       if (episode < 1 || episode > response.episodes.length) return [];
       return getDanDanmakuByEpisodeID(response.episodes[episode - 1].episodeId);
     }

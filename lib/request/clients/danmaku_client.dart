@@ -4,6 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:kazumi/request/core/dio_factory.dart';
 import 'package:kazumi/request/core/network_error_mapper.dart';
 import 'package:kazumi/request/core/danmaku_endpoint.dart';
+import 'package:kazumi/request/core/danmaku_backend_policy.dart';
+import 'package:kazumi/services/danmaku/bilibili_danmaku_service.dart';
 import 'package:kazumi/services/danmaku/local_danmaku_service.dart';
 import 'package:kazumi/services/storage/storage.dart';
 import 'package:kazumi/utils/dandan_credentials.dart';
@@ -12,6 +14,7 @@ import 'package:kazumi/utils/http_headers.dart';
 class DanmakuClient {
   DanmakuClient._();
   static final instance = DanmakuClient._();
+  final _builtIn = BilibiliDanmakuService(dio: () => DioFactory.apiDio);
   final Dio _localDio =
       Dio(BaseOptions(connectTimeout: const Duration(seconds: 5)))
         ..httpClientAdapter = IOHttpClientAdapter(
@@ -33,14 +36,36 @@ class DanmakuClient {
     return LocalDanmakuService.instance.endpoint();
   }
 
+  bool get usesBuiltIn => DanmakuBackendPolicy.usesBuiltIn(
+    isWindows: Platform.isWindows,
+    endpoint: GStorage.getSetting(SettingsKeys.danmakuEndpoint),
+    appId: appId,
+    appSecret: appSecret,
+  );
+
   Future<bool> get usesOfficial async =>
-      (await endpoint()).host == DanmakuEndpoint.officialHost;
+      !usesBuiltIn && (await endpoint()).host == DanmakuEndpoint.officialHost;
   Future<dynamic> get(
     String url, {
     Map<String, dynamic>? queryParameters,
     Map<String, dynamic> headers = const {},
     CancelToken? cancelToken,
   }) async {
+    if (usesBuiltIn || BilibiliDanmakuService.ownsPath(Uri.parse(url).path)) {
+      try {
+        return await _builtIn.get(
+          Uri.parse(url),
+          queryParameters: queryParameters,
+          cancelToken: cancelToken,
+        );
+      } on DioException catch (error) {
+        if (error.response?.statusCode == 412 ||
+            error.response?.statusCode == 403) {
+          throw StateError('哔哩哔哩暂时限制访问，请稍后重试或设置兼容弹幕接口');
+        }
+        throw await NetworkErrorMapper.mapException(error);
+      }
+    }
     final target = DanmakuEndpoint.route(Uri.parse(url), await endpoint());
     final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final requestHeaders = <String, dynamic>{

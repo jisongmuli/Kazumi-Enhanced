@@ -50,7 +50,7 @@ class _EndpointDialogState extends State<_EndpointDialog> {
               Text(
                 Platform.isWindows
                     ? '留空且未配置凭据时，使用本机多来源弹幕服务。可填写弹弹play兼容接口的根地址。'
-                    : '平板需要配置可访问的弹弹play兼容接口，或填写官方 AppId 和 AppSecret。',
+                    : '默认留空即可使用内置哔哩哔哩公开弹幕，无需 AppId、密钥或电脑服务。内置来源保留原文；兼容接口可提供更多来源和繁简转换。',
               ),
               const SizedBox(height: 12),
               TextFormField(

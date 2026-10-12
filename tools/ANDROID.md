@@ -8,7 +8,7 @@
 
 ```powershell
 flutter pub get
-flutter build apk --release --split-per-abi --target-platform=android-arm64 --build-name=2.3.8 --build-number=2030802
+flutter build apk --release --split-per-abi --target-platform=android-arm64 --build-name=2.3.8 --build-number=2030803
 ```
 
 ARM64 输出为 `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`，最低 Android 7.0。发布构建应配置自己的固定签名，后续覆盖安装须使用同一私钥。将以下字段保存到本机 `android/key.properties`，或通过环境变量 `KAZUMI_KEYSTORE_PROPERTIES` 指向其他本机属性文件：
@@ -39,7 +39,9 @@ keyPassword=你的密码
 - 首次安装导入 16 条公开动漫规则，加上 45 个影视/短剧站入口，共 61 条内置检索来源。来源和快照见 [内置规则说明](BUNDLED_RULES.md)，不会把电脑上的私人规则、Cookie 或历史打进 APK。
 - YouTube 的 Windows yt-dlp / Node 组件不包含在 APK 中；Android 页面提供“打开 YouTube”，在外部浏览器观看并使用 YouTube 提供的画质选项。
 - Windows RIFE / VapourSynth 组件不包含在 APK 中；AI 算法不可选。普通光流依赖 Android 播放器及 CPU 性能，未生效时会显示实际检测结果，可以关闭。
-- Android 弹幕需要在“设置 → 弹幕接口”填写可访问的兼容服务地址，或填写自己的官方 AppId / AppSecret。本机 Windows Node 弹幕服务不包含在 APK 中。
+- Android 默认弹幕直接读取哔哩哔哩公开番剧目录、分集和整集分段弹幕，无需 AppId / AppSecret 或电脑服务；未知时长时读取公开 XML 弹幕池。手动搜索后选择番剧和集数；自动匹配按实际集号，预告和花絮不会挤占正片集号。此来源覆盖哔哩哔哩的公开内容；“设置 → 弹幕接口”仍可填写兼容服务或自己的官方凭据来使用其他来源。内置源保留弹幕原文，繁简转换由支持它的兼容/官方接口处理。本机 Windows Node 弹幕服务不包含在 APK 中。
 - APK 不包含桌面端的播放历史、网站 Cookie、弹幕凭据、签名私钥或 Windows 可执行组件。
 
 把 ARM64 APK 传到平板，点击文件并按系统提示允许此次来源安装。若使用兼容服务或代理，需要在平板上单独配置；电脑上的本地代理地址不能直接用于平板。
+
+默认弹幕的显式联网验证：`flutter test --no-pub tools/mobile_danmaku_live_test.dart`，设置 `KAZUMI_VERIFY_DIR` 保存搜索、分集数量和弹幕时间范围报告；主机验证不代替 Android 实机复核。
