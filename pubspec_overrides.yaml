@@ -1,0 +1,6 @@
+# Local Windows build fix for MSVC C2026 in ech_http 0.2.1.
+dependency_overrides:
+  ech_http:
+    path: local_overrides/ech_http
+  media_kit_video:
+    path: local_overrides/media_kit_video

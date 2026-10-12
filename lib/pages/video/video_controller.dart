@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/modules/roads/road_module.dart';
 import 'package:kazumi/pages/video/video_playback_args.dart';
@@ -20,21 +21,22 @@ import 'package:kazumi/modules/comments/comment_response.dart';
 import 'package:kazumi/request/apis/bangumi_api.dart';
 import 'package:kazumi/services/storage/storage.dart';
 import 'package:kazumi/utils/episode_url.dart';
-import 'package:kazumi/utils/http_headers.dart';
 import 'package:kazumi/utils/media.dart';
 import 'package:kazumi/utils/async_session.dart';
 import 'package:kazumi/services/platform/display_mode_service.dart';
 import 'package:kazumi/pages/video/video_fullscreen_controller.dart';
+import 'package:kazumi/services/video_source/youtube_models.dart';
+import 'package:kazumi/services/video_source/youtube_source_service.dart';
+import 'package:kazumi/services/cinema/cinema_service.dart';
+import 'package:kazumi/services/plugin/rule_engine_models.dart'
+    show RuleCancelToken;
 
 part 'video_controller.g.dart';
 
 class VideoPageController = _VideoPageController with _$VideoPageController;
 
 class VideoEpisodeSelection {
-  const VideoEpisodeSelection({
-    required this.episode,
-    required this.road,
-  });
+  const VideoEpisodeSelection({required this.episode, required this.road});
 
   final int episode;
   final int road;
@@ -78,8 +80,10 @@ abstract class _VideoPageController with Store implements Disposable {
   String? _errorMessage;
 
   @observable
-  VideoEpisodeSelection selectedEpisode =
-      const VideoEpisodeSelection(episode: 1, road: 0);
+  VideoEpisodeSelection selectedEpisode = const VideoEpisodeSelection(
+    episode: 1,
+    road: 0,
+  );
 
   @observable
   VideoEpisodeSelection? playingEpisode;
@@ -145,6 +149,9 @@ abstract class _VideoPageController with Store implements Disposable {
   final IDownloadManager downloadManager;
 
   WebViewVideoSourceService? _videoSourceService;
+  final youtubeState = ValueNotifier(const YoutubePlaybackState());
+  RuleCancelToken? _youtubeCancellation;
+  DateTime? _youtubeResolvedAt;
 
   final StreamController<String> _logStreamController =
       StreamController<String>.broadcast();
@@ -164,6 +171,7 @@ abstract class _VideoPageController with Store implements Disposable {
         src = args.src;
         roadList.clear();
         roadList.addAll(args.roads);
+        resetEpisodeState(episode: args.initialEpisode, road: args.initialRoad);
       case OfflineVideoPlaybackArgs():
         _initForOfflinePlayback(
           bangumiItem: args.bangumiItem,
@@ -185,8 +193,9 @@ abstract class _VideoPageController with Store implements Disposable {
   }) {
     this.bangumiItem = bangumiItem;
     _offlinePluginName = pluginName;
-    title =
-        bangumiItem.nameCn.isNotEmpty ? bangumiItem.nameCn : bangumiItem.name;
+    title = bangumiItem.nameCn.isNotEmpty
+        ? bangumiItem.nameCn
+        : bangumiItem.name;
     isOfflineMode = true;
     _loading = false;
 
@@ -213,7 +222,8 @@ abstract class _VideoPageController with Store implements Disposable {
       _playbackHistoryIdentity = null;
     }
     KazumiLogger().i(
-        'VideoPageController: initialized for offline playback, episode $episodeNumber (position: ${selected.episode})');
+      'VideoPageController: initialized for offline playback, episode $episodeNumber (position: ${selected.episode})',
+    );
   }
 
   void _buildOfflineRoadList(List<DownloadEpisode> episodes) {
@@ -223,11 +233,13 @@ abstract class _VideoPageController with Store implements Disposable {
     _offlineEpisodesByNumber.clear();
     _offlineEpisodesByNumber.addAll(snapshot.episodesByNumber);
     _offlineDisplayRoadToOriginalRoad.clear();
-    _offlineDisplayRoadToOriginalRoad
-        .addAll(snapshot.displayRoadToOriginalRoad);
+    _offlineDisplayRoadToOriginalRoad.addAll(
+      snapshot.displayRoadToOriginalRoad,
+    );
     _offlineOriginalRoadToDisplayRoad.clear();
-    _offlineOriginalRoadToDisplayRoad
-        .addAll(snapshot.originalRoadToDisplayRoad);
+    _offlineOriginalRoadToDisplayRoad.addAll(
+      snapshot.originalRoadToDisplayRoad,
+    );
   }
 
   String get offlinePluginName => _offlinePluginName;
@@ -360,7 +372,8 @@ abstract class _VideoPageController with Store implements Disposable {
       displayTitle: episodeTitle,
       pageUrl: downloadEpisode?.episodePageUrl ?? '',
       episodeNumber: episodeNumber,
-      originalRoadIndex: downloadEpisode?.road ??
+      originalRoadIndex:
+          downloadEpisode?.road ??
           _offlineDisplayRoadToOriginalRoad[targetRoad] ??
           targetRoad,
     );
@@ -422,6 +435,8 @@ abstract class _VideoPageController with Store implements Disposable {
     required PlayerController playerController,
   }) async {
     final session = _playbackSessions.begin();
+    _youtubeCancellation?.cancel();
+    youtubeState.value = const YoutubePlaybackState();
     final selection = VideoEpisodeSelection(
       episode: episode,
       road: currentRoad,
@@ -449,7 +464,8 @@ abstract class _VideoPageController with Store implements Disposable {
     final resolvedEpisode = _resolveOnlineEpisode(episode, road: currentRoad);
     if (resolvedEpisode == null) {
       KazumiLogger().e(
-          'VideoPageController: failed to resolve online episode. road=$currentRoad, episode=$episode');
+        'VideoPageController: failed to resolve online episode. road=$currentRoad, episode=$episode',
+      );
       _failLoading('集数解析失败');
       return;
     }
@@ -457,8 +473,9 @@ abstract class _VideoPageController with Store implements Disposable {
     _applyResolvedSelection(resolvedEpisode);
     _setOnlineHistoryIdentity(resolvedEpisode);
 
-    KazumiLogger()
-        .i('VideoPageController: changed to ${resolvedEpisode.displayTitle}');
+    KazumiLogger().i(
+      'VideoPageController: changed to ${resolvedEpisode.displayTitle}',
+    );
     final urlItem = normalizeEpisodeUrl(
       currentPlugin.baseUrl,
       resolvedEpisode.pageUrl,
@@ -479,11 +496,14 @@ abstract class _VideoPageController with Store implements Disposable {
     required AsyncSession session,
     required PlayerController playerController,
   }) async {
-    final resolvedEpisode =
-        _resolveOfflineEpisode(selection.episode, road: selection.road);
+    final resolvedEpisode = _resolveOfflineEpisode(
+      selection.episode,
+      road: selection.road,
+    );
     if (resolvedEpisode == null) {
       KazumiLogger().e(
-          'VideoPageController: failed to resolve offline episode. road=${selection.road}, episode=${selection.episode}');
+        'VideoPageController: failed to resolve offline episode. road=${selection.road}, episode=${selection.episode}',
+      );
       _failLoading('集数解析失败');
       return;
     }
@@ -503,11 +523,13 @@ abstract class _VideoPageController with Store implements Disposable {
       return;
     }
     _finishLoading();
-    final resolvedOffset =
-        offset > 0 ? offset : getHistoryOffsetFor(_playbackHistoryIdentity!);
+    final resolvedOffset = offset > 0
+        ? offset
+        : getHistoryOffsetFor(_playbackHistoryIdentity!);
 
     KazumiLogger().i(
-        'VideoPageController: offline episode changed to ${resolvedEpisode.historyEpisodeNumber} (index: ${selection.episode}), path: $localPath');
+      'VideoPageController: offline episode changed to ${resolvedEpisode.historyEpisodeNumber} (index: ${selection.episode}), path: $localPath',
+    );
 
     final params = PlaybackInitParams(
       videoUrl: localPath,
@@ -525,8 +547,9 @@ abstract class _VideoPageController with Store implements Disposable {
       referer: '',
       currentRoad: resolvedEpisode.roadIndex,
       coverUrl: bangumiItem.images['large'],
-      bangumiName:
-          bangumiItem.nameCn.isNotEmpty ? bangumiItem.nameCn : bangumiItem.name,
+      bangumiName: bangumiItem.nameCn.isNotEmpty
+          ? bangumiItem.nameCn
+          : bangumiItem.name,
     );
 
     final initialized = await playerController.init(params);
@@ -544,6 +567,10 @@ abstract class _VideoPageController with Store implements Disposable {
     AsyncSession session,
   ) async {
     final danmakuSession = _danmakuSessions.begin();
+    if (params.bangumiId < 0) {
+      playerController.danmaku.finishDanmakuLoad(disableDanmaku: true);
+      return;
+    }
     playerController.danmaku.beginDanmakuLoad();
     try {
       final result = await playerController.danmaku.fetchDanmaku(
@@ -553,8 +580,9 @@ abstract class _VideoPageController with Store implements Disposable {
       );
       if (session.isActive && danmakuSession.isActive) {
         if (result.hasDanmakus) {
-          final bool enableDanmaku =
-              GStorage.getSetting(SettingsKeys.danmakuEnabledByDefault);
+          final bool enableDanmaku = GStorage.getSetting(
+            SettingsKeys.danmakuEnabledByDefault,
+          );
           playerController.danmaku.applyDanmakuLoad(
             result,
             enableDanmaku: enableDanmaku,
@@ -580,9 +608,15 @@ abstract class _VideoPageController with Store implements Disposable {
   }
 
   String? _getLocalVideoPath(
-      int bangumiId, String pluginName, int episodeNumber) {
-    final episode =
-        downloadRepository.getEpisode(bangumiId, pluginName, episodeNumber);
+    int bangumiId,
+    String pluginName,
+    int episodeNumber,
+  ) {
+    final episode = downloadRepository.getEpisode(
+      bangumiId,
+      pluginName,
+      episodeNumber,
+    );
     return downloadManager.getLocalVideoPath(episode);
   }
 
@@ -593,59 +627,67 @@ abstract class _VideoPageController with Store implements Disposable {
     required AsyncSession session,
     required PlayerController playerController,
   }) async {
-    _videoSourceService ??= WebViewVideoSourceService();
-
     await _logSubscription?.cancel();
-    _logSubscription = _videoSourceService!.onLog.listen((log) {
-      if (!_logStreamController.isClosed) {
-        _logStreamController.add(log);
-      }
-    });
+    if (!currentPlugin.isYoutube) {
+      _videoSourceService ??= WebViewVideoSourceService();
+      _logSubscription = _videoSourceService!.onLog.listen((log) {
+        if (!_logStreamController.isClosed) _logStreamController.add(log);
+      });
+    }
 
     try {
-      final source = await _videoSourceService!.resolve(
-        url,
-        useLegacyParser: currentPlugin.useLegacyParser,
-        offset: offset,
-      );
+      final VideoSource source;
+      if (currentPlugin.isYoutube) {
+        final cancellation = RuleCancelToken();
+        _youtubeCancellation = cancellation;
+        final video = await YoutubeSourceService.instance.resolve(
+          url,
+          cancelToken: cancellation,
+        );
+        if (session.isStale) return;
+        final quality = video.preferred(
+          GStorage.getSetting(SettingsKeys.youtubeQualityHeight),
+        );
+        _youtubeResolvedAt = DateTime.now();
+        youtubeState.value = YoutubePlaybackState(
+          video: video,
+          selected: quality,
+        );
+        source = _youtubeSource(quality, offset);
+      } else {
+        VideoSource? direct;
+        if (currentPlugin.isCinema) {
+          final cancellation = RuleCancelToken();
+          _youtubeCancellation = cancellation;
+          try {
+            direct = await CinemaService.instance.resolveEpisode(
+              url,
+              offset: offset,
+              cancelToken: cancellation,
+            );
+          } catch (_) {
+            if (session.isStale) return;
+          }
+          if (session.isStale) return;
+        }
+        source =
+            direct ??
+            await _videoSourceService!.resolve(
+              url,
+              useLegacyParser: currentPlugin.useLegacyParser,
+              offset: offset,
+            );
+      }
 
       if (session.isStale) {
         return;
       }
       _finishLoading();
-      KazumiLogger()
-          .i('VideoPageController: resolved video URL: ${source.url}');
-
-      final bool forceAdBlocker =
-          GStorage.getSetting(SettingsKeys.forceAdBlocker);
-
-      final params = PlaybackInitParams(
-        videoUrl: source.url,
-        offset: source.offset,
-        isLocalPlayback: false,
-        videoSourceFormat: source.format,
-        bangumiId: bangumiItem.id,
-        pluginName: currentPlugin.name,
-        episode: resolvedEpisode.listIndex,
-        danmakuEpisodeNumber: resolvedEpisode.danmakuEpisodeNumber,
-        pageUrl: resolvedEpisode.pageUrl,
-        sortNumber: resolvedEpisode.sortNumber,
-        httpHeaders: {
-          'user-agent': currentPlugin.userAgent.isEmpty
-              ? getRandomUA()
-              : currentPlugin.userAgent,
-          if (currentPlugin.referer.isNotEmpty)
-            'referer': currentPlugin.referer,
-        },
-        adBlockerEnabled: forceAdBlocker || currentPlugin.adBlocker,
-        episodeTitle: resolvedEpisode.displayTitle,
-        referer: currentPlugin.referer,
-        currentRoad: resolvedEpisode.roadIndex,
-        coverUrl: bangumiItem.images['large'],
-        bangumiName: bangumiItem.nameCn.isNotEmpty
-            ? bangumiItem.nameCn
-            : bangumiItem.name,
+      KazumiLogger().i(
+        'VideoPageController: resolved video URL: ${source.url}',
       );
+
+      final params = _onlinePlaybackParams(source, resolvedEpisode);
 
       final initialized = await playerController.init(params);
       if (session.isActive && initialized) {
@@ -672,6 +714,111 @@ abstract class _VideoPageController with Store implements Disposable {
     }
   }
 
+  VideoSource _youtubeSource(YoutubeQuality quality, int offset) => VideoSource(
+    url: quality.videoUrl,
+    audioUrl: quality.audioUrl,
+    httpHeaders: quality.headers,
+    offset: offset,
+    type: VideoSourceType.online,
+  );
+
+  PlaybackInitParams _onlinePlaybackParams(
+    VideoSource source,
+    EpisodeRef episode, {
+    bool? autoPlayOverride,
+  }) => PlaybackInitParams(
+    videoUrl: source.url,
+    externalAudioUrl: source.audioUrl,
+    autoPlayOverride: autoPlayOverride,
+    offset: source.offset,
+    isLocalPlayback: false,
+    videoSourceFormat: source.format,
+    bangumiId: bangumiItem.id,
+    pluginName: currentPlugin.name,
+    episode: episode.listIndex,
+    danmakuEpisodeNumber: episode.danmakuEpisodeNumber,
+    pageUrl: episode.pageUrl,
+    sortNumber: episode.sortNumber,
+    httpHeaders: source.httpHeaders.isNotEmpty
+        ? source.httpHeaders
+        : currentPlugin.buildHttpHeaders(),
+    adBlockerEnabled:
+        !currentPlugin.isYoutube &&
+        (GStorage.getSetting(SettingsKeys.forceAdBlocker) ||
+            currentPlugin.adBlocker),
+    episodeTitle: episode.displayTitle,
+    referer: currentPlugin.referer,
+    currentRoad: episode.roadIndex,
+    coverUrl: bangumiItem.images['large'],
+    bangumiName: bangumiItem.nameCn.isNotEmpty
+        ? bangumiItem.nameCn
+        : bangumiItem.name,
+  );
+
+  Future<void> changeYoutubeQuality(
+    YoutubeQuality requested,
+    PlayerController playerController,
+  ) async {
+    final before = youtubeState.value;
+    final video = before.video;
+    final playing = playingEpisode;
+    if (video == null ||
+        before.busy ||
+        playing == null ||
+        before.selected?.id == requested.id) {
+      return;
+    }
+    final episode = resolveEpisode(playing);
+    if (episode == null) return;
+    final wasPlaying = playerController.playback.playerPlaying;
+    final session = _playbackSessions.begin();
+    youtubeState.value = YoutubePlaybackState(
+      video: video,
+      selected: before.selected,
+      busy: true,
+    );
+    try {
+      var fresh = video;
+      if (_youtubeResolvedAt == null ||
+          DateTime.now().difference(_youtubeResolvedAt!) >
+              const Duration(minutes: 10)) {
+        final cancellation = RuleCancelToken();
+        _youtubeCancellation = cancellation;
+        fresh = await YoutubeSourceService.instance.resolve(
+          video.pageUrl,
+          cancelToken: cancellation,
+        );
+        if (session.isStale) return;
+        _youtubeResolvedAt = DateTime.now();
+      }
+      final quality = fresh.preferred(requested.height);
+      final offset = playerController.playback.playerPosition.inSeconds;
+      final initialized = await playerController.init(
+        _onlinePlaybackParams(
+          _youtubeSource(quality, offset),
+          episode,
+          autoPlayOverride: wasPlaying,
+        ),
+      );
+      if (session.isStale) return;
+      if (!initialized) {
+        _failLoading('画质切换失败，请重新选择集数');
+        throw StateError('画质切换失败');
+      }
+      youtubeState.value = YoutubePlaybackState(
+        video: fresh,
+        selected: quality,
+      );
+      await GStorage.putSetting(
+        SettingsKeys.youtubeQualityHeight,
+        requested.height,
+      );
+    } catch (_) {
+      if (session.isActive) youtubeState.value = before;
+      rethrow;
+    }
+  }
+
   void _resetEpisodeComments() {
     _commentSessions.cancel();
     episodeInfo.reset();
@@ -679,6 +826,7 @@ abstract class _VideoPageController with Store implements Disposable {
   }
 
   Future<bool> queryBangumiEpisodeCommentsByID(int id, int episode) async {
+    if (id < 0) return false;
     final session = _commentSessions.begin();
     final EpisodeInfo latestEpisodeInfo;
     try {
@@ -694,8 +842,9 @@ abstract class _VideoPageController with Store implements Disposable {
     }
     final EpisodeCommentResponse value;
     try {
-      value =
-          await BangumiApi.getBangumiCommentsByEpisodeID(latestEpisodeInfo.id);
+      value = await BangumiApi.getBangumiCommentsByEpisodeID(
+        latestEpisodeInfo.id,
+      );
     } catch (_) {
       if (session.isStale) {
         return false;
@@ -707,15 +856,18 @@ abstract class _VideoPageController with Store implements Disposable {
     }
     final commentsList = value.commentList;
     if (!isCommentsAscending) {
-      commentsList
-          .sort((a, b) => b.comment.createdAt.compareTo(a.comment.createdAt));
+      commentsList.sort(
+        (a, b) => b.comment.createdAt.compareTo(a.comment.createdAt),
+      );
     } else {
-      commentsList
-          .sort((a, b) => a.comment.createdAt.compareTo(b.comment.createdAt));
+      commentsList.sort(
+        (a, b) => a.comment.createdAt.compareTo(b.comment.createdAt),
+      );
     }
     _applyEpisodeComments(episode, latestEpisodeInfo, commentsList);
     KazumiLogger().i(
-        'VideoPageController: loaded comments list length ${episodeCommentsList.length}');
+      'VideoPageController: loaded comments list length ${episodeCommentsList.length}',
+    );
     return true;
   }
 
@@ -743,6 +895,8 @@ abstract class _VideoPageController with Store implements Disposable {
   /// Called by Modular when the '/video' route scope is disposed.
   @override
   void dispose() {
+    _youtubeCancellation?.cancel();
+    youtubeState.dispose();
     unawaited(fullscreen.close());
     _playbackSessions.cancel();
     _danmakuSessions.cancel();
@@ -796,16 +950,21 @@ OfflineRoadListSnapshot buildOfflineRoadListSnapshot(
     final displayRoad = roads.length;
     displayRoadToOriginalRoad[displayRoad] = originalRoad;
     originalRoadToDisplayRoad[originalRoad] = displayRoad;
-    roads.add(Road(
-      name: originalRoad >= 0
-          ? '播放列表${originalRoad + 1}'
-          : '播放列表${displayRoad + 1}',
-      data: roadEpisodes.map((e) => e.episodeNumber.toString()).toList(),
-      identifier: roadEpisodes
-          .map((e) =>
-              e.episodeName.isNotEmpty ? e.episodeName : '第${e.episodeNumber}集')
-          .toList(),
-    ));
+    roads.add(
+      Road(
+        name: originalRoad >= 0
+            ? '播放列表${originalRoad + 1}'
+            : '播放列表${displayRoad + 1}',
+        data: roadEpisodes.map((e) => e.episodeNumber.toString()).toList(),
+        identifier: roadEpisodes
+            .map(
+              (e) => e.episodeName.isNotEmpty
+                  ? e.episodeName
+                  : '第${e.episodeNumber}集',
+            )
+            .toList(),
+      ),
+    );
   }
 
   return OfflineRoadListSnapshot(
@@ -856,8 +1015,9 @@ class EpisodeRef {
       pageUrl: pageUrl,
       sortNumber: parsedEpisodeNumber > 0 ? parsedEpisodeNumber : null,
       historyEpisodeNumber: listIndex,
-      danmakuEpisodeNumber:
-          parsedEpisodeNumber > 0 ? parsedEpisodeNumber : listIndex,
+      danmakuEpisodeNumber: parsedEpisodeNumber > 0
+          ? parsedEpisodeNumber
+          : listIndex,
       originalRoadIndex: roadIndex,
     );
   }
@@ -881,8 +1041,8 @@ class _OfflineEpisodeRef extends EpisodeRef {
     required int episodeNumber,
     required super.originalRoadIndex,
   }) : super(
-          sortNumber: episodeNumber,
-          historyEpisodeNumber: episodeNumber,
-          danmakuEpisodeNumber: episodeNumber,
-        );
+         sortNumber: episodeNumber,
+         historyEpisodeNumber: episodeNumber,
+         danmakuEpisodeNumber: episodeNumber,
+       );
 }

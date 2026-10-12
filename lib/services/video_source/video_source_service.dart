@@ -15,6 +15,8 @@ enum VideoSourceType {
 class VideoSource {
   /// 视频 URL (M3U8/MP4/本地路径)
   final String url;
+  final String? audioUrl;
+  final Map<String, String> httpHeaders;
 
   /// 播放偏移量（秒）
   final int offset;
@@ -27,6 +29,8 @@ class VideoSource {
 
   const VideoSource({
     required this.url,
+    this.audioUrl,
+    this.httpHeaders = const {},
     required this.offset,
     required this.type,
     this.format = VideoSourceFormat.auto,

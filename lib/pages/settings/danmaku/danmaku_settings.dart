@@ -4,6 +4,7 @@ import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/bean/settings/settings_detail_scaffold.dart';
 import 'package:kazumi/bean/settings/settings_list.dart';
 import 'package:kazumi/pages/settings/danmaku/danmaku_ch_convert_tile.dart';
+import 'package:kazumi/pages/settings/danmaku/danmaku_endpoint_dialog.dart';
 import 'package:kazumi/services/storage/storage.dart';
 
 class DanmakuSettingsPage extends StatefulWidget {
@@ -154,6 +155,11 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
       title: const Text('弹幕设置'),
       body: SettingsList(
         sections: [
+          SettingsSection(title: const Text('弹幕服务'), tiles: [
+            SettingsTile(leading: Icons.dns_rounded, title: const Text('弹幕接口'),
+              description: const Text('本机多来源 / 弹弹play官方 / 自定义兼容接口'),
+              onPressed: (_) => showDanmakuEndpointDialog(context)),
+          ]),
           SettingsSection(
             title: Text('弹幕来源'),
             tiles: [

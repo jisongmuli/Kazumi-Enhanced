@@ -42,6 +42,52 @@ class SettingKey<T> {
 // Add new settings here. SettingsKeys is the public typed registry used by
 // callers; new keys can use literal string names directly.
 class SettingsKeys {
+  static const youtubeQualityHeight = SettingKey<int>(
+    'youtubeQualityHeight',
+    1080,
+    group: SettingGroup.player,
+  );
+  static const interpolationEngine = SettingKey<int>(
+    'interpolationEngine',
+    0,
+    group: SettingGroup.player,
+  );
+  static const interpolationMultiplier = SettingKey<double>(
+    'interpolationMultiplier',
+    2,
+    group: SettingGroup.player,
+  );
+  static const interpolationSceneDetection = SettingKey<bool>(
+    'interpolationSceneDetection',
+    true,
+    group: SettingGroup.player,
+  );
+  static const interpolationHeight = SettingKey<int>(
+    'interpolationHeight',
+    720,
+    group: SettingGroup.player,
+  );
+  static const interpolationGpu = SettingKey<int>(
+    'interpolationGpu',
+    0,
+    group: SettingGroup.player,
+  );
+  static const danmakuEndpoint = SettingKey<String>(
+    'danmakuEndpoint',
+    '',
+    group: SettingGroup.danmaku,
+  );
+  static const dandanAppId = SettingKey<String>(
+    'dandanAppId',
+    '',
+    group: SettingGroup.danmaku,
+  );
+  static const dandanAppSecret = SettingKey<String>(
+    'dandanAppSecret',
+    '',
+    group: SettingGroup.danmaku,
+  );
+
   static const hAenable = SettingKey<bool>(
     _SettingBoxKey.hAenable,
     true,
@@ -281,7 +327,7 @@ class SettingsKeys {
   );
   static const defaultStartupPage = SettingKey<String>(
     _SettingBoxKey.defaultStartupPage,
-    '/tab/popular/',
+    '/tab/home/',
     group: SettingGroup.interface,
   );
   static const webDavEnable = SettingKey<bool>(
@@ -628,6 +674,15 @@ class SettingsKeys {
     androidEnableOpenSLES,
     androidVideoRenderer,
     androidAutoEnterPIP,
+    interpolationEngine,
+    interpolationMultiplier,
+    interpolationSceneDetection,
+    interpolationGpu,
+    interpolationHeight,
+    youtubeQualityHeight,
+    danmakuEndpoint,
+    dandanAppId,
+    dandanAppSecret,
     defaultSuperResolutionMode,
     disableSuperResolutionWarning,
     playerDisableAnimations,
@@ -666,7 +721,7 @@ class SettingsKeys {
   static List<SettingKey<Object?>> byGroup(SettingGroup group) {
     return [
       for (final key in all)
-        if (key.group == group) key
+        if (key.group == group) key,
     ];
   }
 

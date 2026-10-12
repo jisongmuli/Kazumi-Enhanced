@@ -60,7 +60,7 @@ class PluginSearchService {
     infoController.pluginSearchResponseList.clear();
     infoController.pluginSearchStatus.clear();
 
-    final plugins = List<Plugin>.of(pluginsController.pluginList);
+    final plugins = pluginsController.pluginList.where((plugin) => !plugin.isCinema).toList();
     for (final plugin in plugins) {
       infoController.pluginSearchStatus[plugin.name] =
           PluginSearchStatus.pending;

@@ -1,6 +1,6 @@
 import 'package:flutter_modular/flutter_modular.dart';
-import 'package:kazumi/pages/popular/popular_page.dart';
-import 'package:kazumi/pages/popular/popular_controller.dart';
+import 'package:kazumi/pages/portal/portal_module.dart';
+import 'package:kazumi/pages/portal/portal_models.dart';
 
 final popularModule = createModule(
   path: '/popular',
@@ -8,9 +8,7 @@ final popularModule = createModule(
     c.route(
       '/',
       transition: TransitionType.none,
-      child: (context, state) => PopularPage(
-        controller: inject<PopularController>(),
-      ),
+      child: (context, state) => portalPage(PortalChannel.anime),
     );
   },
 );

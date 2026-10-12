@@ -143,7 +143,9 @@ class _SourceSheetState extends State<SourceSheet> with KazumiDialogOwner {
           ));
     }, onError: (error, stackTrace) {
       KazumiLogger().w('SourceSheet: failed to query playlist', error: error);
-      KazumiDialog.showToast(message: '未能获取播放列表，请重试或选择其他结果');
+      KazumiDialog.showToast(message: plugin.isYoutube && error is ChapterErrorException
+          ? '未能获取 YouTube 播放列表：${error.cause}'
+          : '未能获取播放列表，请重试或选择其他结果');
     });
   }
 
@@ -180,6 +182,7 @@ class _SourceSheetState extends State<SourceSheet> with KazumiDialogOwner {
           // Snapshot observable values here; lazy list builders are not tracked.
           final groupsByName = {
             for (final plugin in _pluginsController.pluginList)
+              if (!plugin.isCinema)
               plugin.name: _SourceSearchGroup(
                 name: plugin.name,
                 keyword: _keywordFor(plugin.name),

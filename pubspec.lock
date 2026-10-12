@@ -391,10 +391,9 @@ packages:
   ech_http:
     dependency: "direct main"
     description:
-      name: ech_http
-      sha256: "0fb7ae7fcc44e4a015e2b19a98c04d72cf65079467d61c1142c22fdc21fc4d2d"
-      url: "https://pub.dev"
-    source: hosted
+      path: "local_overrides/ech_http"
+      relative: true
+    source: path
     version: "0.2.1"
   equatable:
     dependency: transitive
@@ -988,11 +987,9 @@ packages:
   media_kit_video:
     dependency: "direct main"
     description:
-      path: media_kit_video
-      ref: "803c4a27912091db6f839d48d1b984a0d9f588c7"
-      resolved-ref: "803c4a27912091db6f839d48d1b984a0d9f588c7"
-      url: "https://github.com/Predidit/media-kit.git"
-    source: git
+      path: "local_overrides/media_kit_video"
+      relative: true
+    source: path
     version: "1.2.5"
   menu_base:
     dependency: transitive

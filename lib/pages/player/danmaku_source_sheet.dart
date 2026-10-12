@@ -19,6 +19,8 @@ import 'package:kazumi/pages/player/controller/player_danmaku_controller.dart';
 import 'package:kazumi/request/apis/danmaku_api.dart';
 import 'package:kazumi/services/logging/logger.dart';
 import 'package:kazumi/services/storage/storage.dart';
+import 'package:kazumi/pages/settings/danmaku/danmaku_endpoint_dialog.dart';
+import 'package:kazumi/request/core/network_exception.dart';
 
 const _episodeToolThreshold = 25;
 const _episodeSegmentSize = 100;
@@ -171,7 +173,8 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = '搜索失败';
+        _error = error is StateError ? error.message.toString()
+            : error is NetworkException ? '搜索失败：${error.message}' : '搜索失败，请检查弹幕接口';
       });
     }
   }
@@ -429,6 +432,9 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                TextButton.icon(onPressed: () => showDanmakuEndpointDialog(context),
+                  icon: const Icon(Icons.dns_outlined), label: const Text('弹幕接口')),
+                const Spacer(),
                 TextButton(
                   onPressed: () => KazumiDialog.dismiss(context: context),
                   child: const Text('取消'),

@@ -1,9 +1,5 @@
 enum SuperResolutionMode {
-  off(
-    storageValue: 1,
-    label: '关闭',
-    description: '默认禁用超分辨率',
-  ),
+  off(storageValue: 1, label: '关闭', description: '默认禁用超分辨率'),
   efficiency(
     storageValue: 2,
     label: '效率档',
@@ -13,6 +9,17 @@ enum SuperResolutionMode {
     storageValue: 3,
     label: '质量档',
     description: '默认启用基于Anime4K的超分辨率 (质量优先)',
+  ),
+
+  artCnnFast(
+    storageValue: 4,
+    label: 'ArtCNN 轻量',
+    description: 'ArtCNN C4F16 神经网络超分，保留纹理',
+  ),
+  artCnnQuality(
+    storageValue: 5,
+    label: 'ArtCNN 质量',
+    description: 'ArtCNN C4F32 神经网络超分，更高计算开销',
   );
 
   const SuperResolutionMode({

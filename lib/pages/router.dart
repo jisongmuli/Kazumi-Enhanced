@@ -27,4 +27,8 @@ const MenuRoute menu = MenuRoute([
   MenuRouteItem(path: '/timeline'),
   MenuRouteItem(path: '/collect'),
   MenuRouteItem(path: '/my'),
+  MenuRouteItem(path: '/cinema'),
+  MenuRouteItem(path: '/home'),
+  MenuRouteItem(path: '/shorts'),
+  MenuRouteItem(path: '/youtube'),
 ]);

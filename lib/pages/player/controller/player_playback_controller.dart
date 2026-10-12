@@ -1,6 +1,13 @@
+import 'dart:async';
 // ignore_for_file: library_private_types_in_public_api
 
 import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:kazumi/services/player/interpolation_runtime.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:kazumi/services/player/frame_interpolation.dart';
+import 'package:kazumi/services/player/video_enhancement_runtime.dart';
 import 'dart:typed_data';
 
 import 'package:flutter_volume_controller/flutter_volume_controller.dart';
@@ -13,6 +20,7 @@ import 'package:kazumi/services/logging/logger.dart';
 import 'package:kazumi/services/network/proxy_utils.dart';
 import 'package:kazumi/services/network/system_proxy_service.dart';
 import 'package:kazumi/services/player/playback_cache_policy.dart';
+import 'package:kazumi/services/player/playback_network_policy.dart';
 import 'package:kazumi/services/player/player_error_mapper.dart';
 import 'package:kazumi/services/storage/storage.dart';
 import 'package:kazumi/services/video_source/video_source_format.dart';
@@ -93,6 +101,30 @@ abstract class _PlayerPlaybackController with Store {
   /// 当前超分辨率模式
   @observable
   SuperResolutionMode superResolutionMode = SuperResolutionMode.off;
+  @observable
+  FrameInterpolation interpolation = const FrameInterpolation();
+  @observable
+  bool interpolationBusy = false;
+  final AsyncSerialQueue _interpolationQueue = AsyncSerialQueue();
+  File? _interpolationScript;
+  StreamSubscription<PlayerLog>? _interpolationErrors;
+  final interpolationStatus = ValueNotifier(const InterpolationStatus());
+  Timer? _interpolationMonitor;
+  int _interpolationRequest = 0;
+  int _lastInterpolationDrops = 0;
+  bool _checkingInterpolation = false;
+
+  FrameInterpolation _storedInterpolation() => FrameInterpolation(
+    engine: InterpolationEngine.fromIndex(
+      GStorage.getSetting(SettingsKeys.interpolationEngine),
+    ),
+    multiplier: GStorage.getSetting(SettingsKeys.interpolationMultiplier),
+    sceneDetection: GStorage.getSetting(
+      SettingsKeys.interpolationSceneDetection,
+    ),
+    gpu: GStorage.getSetting(SettingsKeys.interpolationGpu),
+    processingHeight: GStorage.getSetting(SettingsKeys.interpolationHeight),
+  );
 
   @observable
   double volume = -1;
@@ -171,8 +203,10 @@ abstract class _PlayerPlaybackController with Store {
       await player.play();
       startOffset = 0;
     } catch (e) {
-      KazumiLogger()
-          .w('PlayerController: failed to restart from beginning', error: e);
+      KazumiLogger().w(
+        'PlayerController: failed to restart from beginning',
+        error: e,
+      );
     }
   }
 
@@ -272,16 +306,20 @@ abstract class _PlayerPlaybackController with Store {
     required bool Function() canInstall,
     int offset = 0,
     VideoSourceFormat videoSourceFormat = VideoSourceFormat.auto,
+    String? externalAudioUrl,
+    bool? autoPlayOverride,
   }) async {
     startOffset = offset;
     superResolutionMode = SuperResolutionMode.fromStorageValue(
       GStorage.getSetting(SettingsKeys.defaultSuperResolutionMode),
     );
+    interpolation = const FrameInterpolation();
     hAenable = GStorage.getSetting(SettingsKeys.hAenable);
-    androidEnableOpenSLES =
-        GStorage.getSetting(SettingsKeys.androidEnableOpenSLES);
+    androidEnableOpenSLES = GStorage.getSetting(
+      SettingsKeys.androidEnableOpenSLES,
+    );
     hardwareDecoder = GStorage.getSetting(SettingsKeys.hardwareDecoder);
-    autoPlay = GStorage.getSetting(SettingsKeys.autoPlay);
+    autoPlay = autoPlayOverride ?? GStorage.getSetting(SettingsKeys.autoPlay);
     playerDebugMode = GStorage.getSetting(SettingsKeys.playerDebugMode);
 
     if (!canInstall()) {
@@ -306,6 +344,29 @@ abstract class _PlayerPlaybackController with Store {
     cachePolicy.startWatching();
 
     try {
+      await _interpolationErrors?.cancel();
+      _interpolationErrors = player.stream.log.listen((event) {
+        if (isCurrentPlayer(player) &&
+            event.text.contains('Disabling filter') &&
+            (event.text.contains('kazumi-interpolation') ||
+                event.text.contains('vapoursynth') ||
+                event.text.contains('lavfi'))) {
+          unawaited(
+            disableInterpolation(reason: event.text.trim())
+                .then((_) {
+                  KazumiDialog.showToast(
+                    message: '插帧运行失败，已关闭。请查看插帧状态或降低处理分辨率。',
+                  );
+                })
+                .catchError((Object error) {
+                  KazumiLogger().w(
+                    'Failed to disable interpolation after filter error',
+                    error: error,
+                  );
+                }),
+          );
+        }
+      });
       debug.playerLog.clear();
       await debug.setup(
         player,
@@ -328,6 +389,14 @@ abstract class _PlayerPlaybackController with Store {
       if (!isCurrentPlayer(player)) {
         return await _discardIfNotCurrent(candidate);
       }
+      if (VideoEnhancementRuntime.available) {
+        await pp.command([
+          'change-list',
+          'demuxer-lavf-o',
+          'remove',
+          'hls_ad_filter=${adBlockerEnabled ? 1 : 0}',
+        ]);
+      }
       await pp.setProperty("af", "scaletempo2=max-speed=8");
       if (!isCurrentPlayer(player)) {
         return await _discardIfNotCurrent(candidate);
@@ -347,6 +416,18 @@ abstract class _PlayerPlaybackController with Store {
         }
       }
 
+      await PlaybackNetworkPolicy.apply(
+        url: videoUrl(),
+        isLocalPlayback: isLocalPlayback(),
+        bufferSize: cachePolicy.bufferSize,
+        isCurrent: () => isCurrentPlayer(player),
+        setProperty: (name, value) => pp.setProperty(name, value),
+        command: (args) => pp.command(args),
+      );
+      if (!isCurrentPlayer(player)) {
+        return await _discardIfNotCurrent(candidate);
+      }
+
       final bool proxyEnable = GStorage.getSetting(SettingsKeys.proxyEnable);
       if (proxyEnable) {
         final String proxyUrl = GStorage.getSetting(SettingsKeys.proxyUrl);
@@ -359,27 +440,30 @@ abstract class _PlayerPlaybackController with Store {
           KazumiLogger().i('Player: HTTP 代理设置成功 $formattedProxy');
         }
       } else if (SystemProxyService.isActive) {
-        final proxy = SystemProxyService.proxyFor('https');
-        if (proxy != null) {
-          await pp.setProperty("http-proxy", 'http://${proxy.$1}:${proxy.$2}');
+        final uri = Uri.tryParse(videoUrl());
+        final proxy = uri == null
+            ? 'DIRECT'
+            : SystemProxyService.findProxy(uri);
+        if (proxy.startsWith('PROXY ')) {
+          final proxyUrl = 'http://${proxy.substring(6)}';
+          await pp.setProperty("http-proxy", proxyUrl);
           if (!isCurrentPlayer(player)) {
             return await _discardIfNotCurrent(candidate);
           }
-          KazumiLogger().i('Player: 跟随系统代理 http://${proxy.$1}:${proxy.$2}');
+          KazumiLogger().i('Player: 跟随系统代理 $proxyUrl');
         }
       }
 
-      await player.setAudioTrack(
-        AudioTrack.auto(),
-      );
+      await player.setAudioTrack(AudioTrack.auto());
       if (!isCurrentPlayer(player)) {
         return await _discardIfNotCurrent(candidate);
       }
 
       String? videoRenderer;
       if (Platform.isAndroid) {
-        final String androidVideoRenderer =
-            GStorage.getSetting(SettingsKeys.androidVideoRenderer);
+        final String androidVideoRenderer = GStorage.getSetting(
+          SettingsKeys.androidVideoRenderer,
+        );
 
         if (androidVideoRenderer == 'auto') {
           // Android 14 及以上使用基于 Vulkan 的 MPV GPU-NEXT 视频输出，着色器性能更好
@@ -430,16 +514,21 @@ abstract class _PlayerPlaybackController with Store {
           );
           if (actionableMessage != null) {
             KazumiDialog.showToast(
-                message: actionableMessage, showActionButton: true);
+              message: actionableMessage,
+              showActionButton: true,
+            );
           } else if (showPlayerError) {
             KazumiDialog.showToast(
-                message: '播放器内部错误 ${event.toString()} ${videoUrl()}',
-                duration: const Duration(seconds: 5),
-                showActionButton: true);
+              message: '播放器内部错误 ${event.toString()} ${videoUrl()}',
+              duration: const Duration(seconds: 5),
+              showActionButton: true,
+            );
           }
         }
-        KazumiLogger().e('PlayerController: Player intent error ${videoUrl()}',
-            error: event);
+        KazumiLogger().e(
+          'PlayerController: Player intent error ${videoUrl()}',
+          error: event,
+        );
       });
 
       if (superResolutionMode != SuperResolutionMode.off) {
@@ -456,15 +545,41 @@ abstract class _PlayerPlaybackController with Store {
         }
       }
 
+      await pp.command(['change-list', 'audio-files', 'clr', '']);
+      if (externalAudioUrl != null) {
+        await pp.command([
+          'change-list',
+          'audio-files',
+          'append',
+          externalAudioUrl,
+        ]);
+      }
+      if (!isCurrentPlayer(player))
+        return await _discardIfNotCurrent(candidate);
       await player.open(
-        Media(videoUrl(),
-            start: Duration(seconds: offset), httpHeaders: httpHeaders),
+        Media(
+          videoUrl(),
+          start: Duration(seconds: offset),
+          httpHeaders: httpHeaders,
+        ),
         play: autoPlay,
       );
       if (!isCurrentPlayer(player)) {
         return await _discardIfNotCurrent(candidate);
       }
 
+      final wantedInterpolation = _storedInterpolation();
+      if (wantedInterpolation.engine != InterpolationEngine.off) {
+        try {
+          await setInterpolation(
+            wantedInterpolation,
+            player: player,
+            persist: false,
+          );
+        } catch (error) {
+          KazumiDialog.showToast(message: '插帧未启用：$error');
+        }
+      }
       if (cachePolicy.networkAutomatic) {
         KazumiDialog.showToast(message: '移动数据下已自动开启低内存模式，可在播放设置中改为始终关闭');
       }
@@ -514,6 +629,19 @@ abstract class _PlayerPlaybackController with Store {
             ),
           ]);
           break;
+        case SuperResolutionMode.artCnnFast:
+        case SuperResolutionMode.artCnnQuality:
+          await pp.command([
+            'change-list',
+            'glsl-shaders',
+            'set',
+            buildShadersAbsolutePath(shaderAssetService.shadersDirectory.path, [
+              mode == SuperResolutionMode.artCnnFast
+                  ? 'ArtCNN_C4F16.glsl'
+                  : 'ArtCNN_C4F32.glsl',
+            ]),
+          ]);
+          break;
         case SuperResolutionMode.off:
           await pp.command(['change-list', 'glsl-shaders', 'clr', '']);
           break;
@@ -524,13 +652,216 @@ abstract class _PlayerPlaybackController with Store {
     }
   }
 
+  Future<void> disableInterpolation({String? reason}) async {
+    await setInterpolation(
+      interpolation.copyWith(engine: InterpolationEngine.off),
+    );
+    if (reason != null) {
+      interpolationStatus.value = InterpolationStatus(
+        phase: InterpolationPhase.failed,
+        message: reason,
+      );
+      KazumiLogger().w('Interpolation disabled: $reason');
+    }
+  }
+
+  Future<void> setInterpolation(
+    FrameInterpolation settings, {
+    Player? player,
+    bool persist = true,
+  }) async {
+    final request = ++_interpolationRequest;
+    _interpolationMonitor?.cancel();
+    interpolationStatus.value = InterpolationStatus(
+      phase: settings.engine == InterpolationEngine.off
+          ? InterpolationPhase.stopping
+          : InterpolationPhase.starting,
+    );
+    // Persist an explicit stop before any pending activation can finish.
+    if (persist && settings.engine == InterpolationEngine.off) {
+      await GStorage.putSetting(
+        SettingsKeys.interpolationEngine,
+        InterpolationEngine.off.index,
+      );
+    }
+    await _interpolationQueue.run(() async {
+      final current = player ?? mediaPlayer;
+      bool valid() =>
+          request == _interpolationRequest &&
+          current != null &&
+          isCurrentPlayer(current);
+      if (!valid()) return;
+      final pp = current!.platform as NativePlayer;
+      interpolationBusy = true;
+      File? script;
+      try {
+        await pp.waitForPlayerInitialization;
+        await pp.waitForVideoControllerInitializationIfAttached;
+        if (!valid()) return;
+        if (settings.engine == InterpolationEngine.off) {
+          await InterpolationRuntime.remove(
+            get: pp.getProperty,
+            command: pp.command,
+          );
+          await pp.setProperty('hwdec', hAenable ? hardwareDecoder : 'no');
+          interpolationStatus.value = const InterpolationStatus();
+        } else {
+          if (settings.engine.isAi && !VideoEnhancementRuntime.available) {
+            throw StateError('RIFE 运行组件不完整，请检查程序旁的 video_engine 目录');
+          }
+          if (settings.engine.isAi) {
+            final temporary = await getTemporaryDirectory();
+            script = File(
+              path.join(
+                temporary.path,
+                'kazumi-rife-${DateTime.now().microsecondsSinceEpoch}.vpy',
+              ),
+            );
+            await script.writeAsString(
+              settings.script(
+                path.join(
+                  VideoEnhancementRuntime.directory.path,
+                  'plugins',
+                  'librife.dll',
+                ),
+              ),
+            );
+          }
+          final status = await InterpolationRuntime.apply(
+            settings: settings,
+            scriptPath: script?.path ?? '',
+            get: pp.getProperty,
+            set: pp.setProperty,
+            command: pp.command,
+            isCurrent: valid,
+            hardwareEnabled: hAenable,
+          );
+          if (!valid() || status == null) return;
+          interpolationStatus.value = status;
+          _lastInterpolationDrops = status.droppedFrames;
+        }
+        if (!valid()) return;
+        final oldScript = _interpolationScript;
+        _interpolationScript = script;
+        script = null;
+        if (oldScript != null && await oldScript.exists())
+          await oldScript.delete();
+        interpolation = settings;
+        if (persist) {
+          await GStorage.putSetting(
+            SettingsKeys.interpolationEngine,
+            settings.engine.index,
+          );
+          await GStorage.putSetting(
+            SettingsKeys.interpolationMultiplier,
+            settings.multiplier,
+          );
+          await GStorage.putSetting(
+            SettingsKeys.interpolationSceneDetection,
+            settings.sceneDetection,
+          );
+          await GStorage.putSetting(
+            SettingsKeys.interpolationGpu,
+            settings.gpu,
+          );
+          await GStorage.putSetting(
+            SettingsKeys.interpolationHeight,
+            settings.processingHeight,
+          );
+        }
+        if (settings.engine != InterpolationEngine.off) {
+          _interpolationMonitor = Timer.periodic(const Duration(seconds: 1), (
+            _,
+          ) {
+            unawaited(_checkInterpolation(current, request));
+          });
+        }
+        KazumiLogger().i(
+          'Interpolation ${settings.engine.name}: ${interpolationStatus.value.summary}',
+          forceLog: true,
+        );
+      } catch (error) {
+        if (valid()) {
+          await InterpolationRuntime.remove(
+            get: pp.getProperty,
+            command: pp.command,
+          );
+          await pp.setProperty('hwdec', hAenable ? hardwareDecoder : 'no');
+          interpolation = settings.copyWith(engine: InterpolationEngine.off);
+          interpolationStatus.value = InterpolationStatus(
+            phase: InterpolationPhase.failed,
+            message: error.toString(),
+          );
+          await GStorage.putSetting(
+            SettingsKeys.interpolationEngine,
+            InterpolationEngine.off.index,
+          );
+          KazumiLogger().w('Interpolation activation failed', error: error);
+          rethrow;
+        }
+      } finally {
+        if (script != null && await script.exists()) await script.delete();
+        interpolationBusy = false;
+      }
+    });
+  }
+
+  Future<void> _checkInterpolation(Player player, int request) async {
+    if (_checkingInterpolation ||
+        !isCurrentPlayer(player) ||
+        request != _interpolationRequest)
+      return;
+    _checkingInterpolation = true;
+    try {
+      final pp = player.platform as NativePlayer;
+      if (!(await pp.getProperty('vf')).contains(InterpolationRuntime.label)) {
+        await disableInterpolation(reason: '播放器已卸载插帧滤镜');
+        return;
+      }
+      final previous = interpolationStatus.value;
+      final source =
+          double.tryParse(await pp.getProperty('container-fps')) ??
+          previous.sourceFps;
+      final output =
+          double.tryParse(await pp.getProperty('estimated-vf-fps')) ?? 0;
+      final drops = int.tryParse(await pp.getProperty('frame-drop-count')) ?? 0;
+      final paused = await pp.getProperty('pause') == 'yes';
+      if (!isCurrentPlayer(player) || request != _interpolationRequest) return;
+      final limited =
+          drops - _lastInterpolationDrops >
+          source * interpolation.multiplier * .1;
+      _lastInterpolationDrops = drops;
+      interpolationStatus.value = InterpolationStatus(
+        phase: paused
+            ? InterpolationPhase.waiting
+            : limited ||
+                  !InterpolationRuntime.reachesTarget(
+                    source,
+                    output,
+                    interpolation.multiplier,
+                  )
+            ? InterpolationPhase.limited
+            : InterpolationPhase.active,
+        sourceFps: source,
+        outputFps: output,
+        droppedFrames: drops,
+      );
+    } catch (error) {
+      KazumiLogger().w('Interpolation status read failed', error: error);
+    } finally {
+      _checkingInterpolation = false;
+    }
+  }
+
   Future<void> setPlaybackSpeed(double playerSpeed) async {
     this.playerSpeed = playerSpeed;
     try {
       mediaPlayer!.setRate(playerSpeed);
     } catch (e) {
-      KazumiLogger()
-          .e('PlayerController: failed to set playback speed', error: e);
+      KazumiLogger().e(
+        'PlayerController: failed to set playback speed',
+        error: e,
+      );
     }
   }
 
@@ -615,7 +946,16 @@ abstract class _PlayerPlaybackController with Store {
   }
 
   Future<void> stop() async {
+    ++_interpolationRequest;
+    _interpolationMonitor?.cancel();
+    _interpolationMonitor = null;
+    interpolationStatus.value = const InterpolationStatus();
+    interpolation = interpolation.copyWith(engine: InterpolationEngine.off);
     cachePolicy.stopWatching();
+    await _interpolationErrors?.cancel();
+    _interpolationErrors = null;
+    final script = _interpolationScript;
+    _interpolationScript = null;
     final ownedPlayer = _ownedPlayer;
     _ownedPlayer = null;
     videoController = null;
@@ -627,6 +967,7 @@ abstract class _PlayerPlaybackController with Store {
       ownedPlayer?.dispose() ?? Future<void>.value(),
       _cancelDebugInfo(),
     ]);
+    if (script != null && await script.exists()) await script.delete();
   }
 
   Future<Uint8List?> screenshotPng() async {

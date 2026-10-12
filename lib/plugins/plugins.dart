@@ -6,6 +6,9 @@ import 'package:kazumi/request/config/api_endpoints.dart';
 import 'package:kazumi/services/plugin/api_rule_engine.dart';
 import 'package:kazumi/utils/episode_url.dart';
 import 'package:kazumi/utils/http_headers.dart';
+import 'package:kazumi/services/video_source/youtube_source_service.dart';
+import 'package:kazumi/services/cinema/cinema_models.dart';
+import 'package:kazumi/services/cinema/cinema_service.dart';
 
 export 'package:kazumi/services/plugin/rule_engine_models.dart'
     show
@@ -73,9 +76,9 @@ class Plugin {
     ApiSearchConfig? searchApiConfig,
     ApiChapterConfig? chapterApiConfig,
     AntiCrawlerConfig? antiCrawlerConfig,
-  })  : searchApiConfig = searchApiConfig ?? ApiSearchConfig(),
-        chapterApiConfig = chapterApiConfig ?? ApiChapterConfig(),
-        antiCrawlerConfig = antiCrawlerConfig ?? AntiCrawlerConfig.empty();
+  }) : searchApiConfig = searchApiConfig ?? ApiSearchConfig(),
+       chapterApiConfig = chapterApiConfig ?? ApiChapterConfig(),
+       antiCrawlerConfig = antiCrawlerConfig ?? AntiCrawlerConfig.empty();
 
   factory Plugin.fromJson(Map<String, dynamic> json) {
     return Plugin(
@@ -182,25 +185,29 @@ class Plugin {
   }
 
   bool get usesApiSearch => searchMode == RuleMode.api;
+  bool get isCinema => type == 'cinema';
+
+  bool get isYoutube =>
+      type == 'youtube' && Uri.tryParse(baseUrl)?.host == 'www.youtube.com';
 
   bool get requiresNewerClient => int.parse(api) > ApiEndpoints.apiLevel;
 
   RuleExecutionConfig get _executionConfig => RuleExecutionConfig(
-        pluginName: name,
-        baseUrl: baseUrl,
-        usePost: usePost,
-        searchMode: searchMode,
-        chapterMode: chapterMode,
-        searchUrl: searchURL,
-        searchList: searchList,
-        searchName: searchName,
-        searchResult: searchResult,
-        chapterRoads: chapterRoads,
-        chapterResult: chapterResult,
-        searchApiConfig: searchApiConfig,
-        chapterApiConfig: chapterApiConfig,
-        antiCrawlerConfig: antiCrawlerConfig,
-      );
+    pluginName: name,
+    baseUrl: baseUrl,
+    usePost: usePost,
+    searchMode: searchMode,
+    chapterMode: chapterMode,
+    searchUrl: searchURL,
+    searchList: searchList,
+    searchName: searchName,
+    searchResult: searchResult,
+    chapterRoads: chapterRoads,
+    chapterResult: chapterResult,
+    searchApiConfig: searchApiConfig,
+    chapterApiConfig: chapterApiConfig,
+    antiCrawlerConfig: antiCrawlerConfig,
+  );
 
   Future<RuleSearchTrace> traceSearch(
     String keyword, {
@@ -237,6 +244,38 @@ class Plugin {
     RuleCancelToken? cancelToken,
   }) async {
     try {
+      if (isCinema) {
+        try {
+          final result = await CinemaService.instance.listing(
+            CinemaSource(id: name, name: name, url: baseUrl),
+            keyword: keyword,
+            cancelToken: cancelToken,
+          );
+          if (result.films.isEmpty) throw NoResultException(name);
+          return PluginSearchResponse(
+            pluginName: name,
+            data: result.films
+                .map((film) => SearchItem(name: film.title, src: film.url))
+                .toList(),
+          );
+        } on NoResultException {
+          rethrow;
+        } catch (error) {
+          throw SearchErrorException(name, cause: error);
+        }
+      }
+      if (isYoutube) {
+        try {
+          return await YoutubeSourceService.instance.search(
+            keyword,
+            cancelToken: cancelToken,
+          );
+        } on NoResultException {
+          rethrow;
+        } catch (error) {
+          throw SearchErrorException(name, cause: error);
+        }
+      }
       return (await traceSearch(keyword, cancelToken: cancelToken)).response;
     } on CaptchaRequiredException {
       rethrow;
@@ -252,6 +291,27 @@ class Plugin {
     String source, {
     RuleCancelToken? cancelToken,
   }) async {
+    if (isCinema) {
+      try {
+        return (await CinemaService.instance.detailFromPlugin(
+          this,
+          source,
+          cancelToken: cancelToken,
+        )).roads;
+      } catch (error) {
+        throw ChapterErrorException(name, cause: error);
+      }
+    }
+    if (isYoutube) {
+      try {
+        return await YoutubeSourceService.instance.chapters(
+          source,
+          cancelToken: cancelToken,
+        );
+      } catch (error) {
+        throw ChapterErrorException(name, cause: error);
+      }
+    }
     return (await traceChapters(source, cancelToken: cancelToken)).roads;
   }
 

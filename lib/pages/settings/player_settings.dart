@@ -298,7 +298,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 onPressed: (_) async {
                   context.pushNamed('/settings/player/super');
                 },
-                title: Text('超分辨率'),
+                title: Text('超分辨率与插帧'),
               ),
             ],
           ),

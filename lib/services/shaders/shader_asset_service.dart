@@ -28,12 +28,6 @@ class ShaderAssetService {
     for (var filePath in shaderFiles) {
       final fileName = filePath.split('/').last;
       final targetFile = File(path.join(shadersDirectory.path, fileName));
-      if (await targetFile.exists()) {
-        KazumiLogger()
-            .i('ShaderManager: GLSL Shader exists, skip: ${targetFile.path}');
-        continue;
-      }
-
       try {
         final data = await rootBundle.load(filePath);
         final List<int> bytes = data.buffer.asUint8List();

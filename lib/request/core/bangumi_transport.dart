@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:ech_http/ech_http.dart';
 import 'package:http/http.dart' as http;
 import 'package:kazumi/request/config/api_endpoints.dart';
+import 'package:kazumi/request/core/bangumi_mirror_policy.dart';
 import 'package:kazumi/request/core/network_config.dart';
 import 'package:kazumi/services/logging/logger.dart';
 import 'package:kazumi/services/network/bangumi_acceleration.dart';
@@ -13,12 +14,20 @@ import 'package:kazumi/services/network/bangumi_ech_resolver.dart';
 const _echRequestKey = 'bangumiEch';
 
 class BangumiAccelerationInterceptor extends Interceptor {
+  BangumiAccelerationInterceptor({
+    this.acceleration,
+    this.hasMirrorCredentials,
+  });
+
+  final BangumiAcceleration? acceleration;
+  final bool? hasMirrorCredentials;
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     options.extra.remove(_echRequestKey);
     final uri = options.uri;
     if (ApiEndpoints.bangumiPublicApiHosts.contains(uri.host)) {
-      switch (BangumiAcceleration.current) {
+      switch (acceleration ?? BangumiAcceleration.current) {
         case BangumiAcceleration.direct:
           break;
         case BangumiAcceleration.ech:
@@ -26,6 +35,12 @@ class BangumiAccelerationInterceptor extends Interceptor {
           options.queryParameters = {};
           options.extra[_echRequestKey] = true;
         case BangumiAcceleration.mirror:
+          // Source builds lack the private mirror keys. Public upstream APIs
+          // remain usable without them, so do not send unsigned mirror calls.
+          if (!(hasMirrorCredentials ?? BangumiMirrorPolicy.hasCredentials) &&
+              BangumiMirrorPolicy.requiresSignature(uri, options.method)) {
+            break;
+          }
           options.path =
               ApiEndpoints.bangumiMirrorDomain +
               uri.path +

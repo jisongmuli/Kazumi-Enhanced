@@ -10,6 +10,11 @@ import 'package:kazumi/pages/my/my_module.dart';
 import 'package:kazumi/pages/onboarding/onboarding_page.dart';
 import 'package:kazumi/pages/popular/popular_controller.dart';
 import 'package:kazumi/pages/popular/popular_module.dart';
+import 'package:kazumi/pages/portal/portal_module.dart';
+import 'package:kazumi/pages/cinema/cinema_module.dart';
+import 'package:kazumi/pages/cinema/cinema_controller.dart';
+import 'package:kazumi/pages/cinema/cinema_detail_page.dart';
+import 'package:kazumi/services/cinema/cinema_models.dart';
 import 'package:kazumi/pages/route_error_page.dart';
 import 'package:kazumi/pages/search/search_module.dart';
 import 'package:kazumi/pages/settings/settings_module.dart';
@@ -44,6 +49,7 @@ final tabModule = createModule(
     c
       // Tab state survives tab switches, but is released with the whole shell.
       ..addSingleton<PopularController>(PopularController.new)
+      ..addSingleton<CinemaController>(CinemaController.new)
       ..addSingleton<TimelineController>(TimelineController.new)
       ..route(
         '/',
@@ -59,6 +65,10 @@ final tabModule = createModule(
               child: (context, state) => const SizedBox.shrink(),
             )
             ..module(popularModule)
+            ..module(homeModule)
+            ..module(shortsModule)
+            ..module(youtubeModule)
+            ..module(cinemaModule)
             ..module(timelineModule)
             ..module(collectModule)
             ..module(myModule);
@@ -94,14 +104,20 @@ final indexModule = createModule(
         '/error',
         child: (context, state) => Scaffold(
           appBar: AppBar(title: const Text('Kazumi')),
-          body: const GeneralErrorWidget(
-            title: '初始化失败',
-            errMsg: '请重新启动应用后再试。',
-          ),
+          body: const GeneralErrorWidget(title: '初始化失败', errMsg: '请重新启动应用后再试。'),
         ),
       )
       ..module(tabModule)
       ..module(videoModule)
+      ..route(
+        '/cinema/detail',
+        child: (context, state) {
+          final film = state.arguments;
+          return film is CinemaFilm
+              ? CinemaDetailPage(film: film)
+              : const RouteErrorPage(message: '影片参数无效，请重新选择影片。');
+        },
+      )
       ..route(
         ImageViewer.routePath,
         child: (context, state) {

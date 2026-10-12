@@ -9,6 +9,7 @@ import 'package:hive_ce/hive.dart';
 import 'package:kazumi/pages/collect/collect_controller.dart';
 import 'package:kazumi/repositories/collect_crud_repository.dart';
 import 'package:kazumi/request/clients/bangumi_client.dart';
+import 'package:kazumi/request/core/bangumi_mirror_policy.dart';
 import 'package:kazumi/request/core/dio_factory.dart';
 import 'package:kazumi/request/core/network_exception.dart';
 import 'package:kazumi/services/storage/storage.dart';
@@ -102,6 +103,32 @@ void main() {
       );
     }
   });
+
+  test(
+    'source build search omits mirror signatures and preserves user auth',
+    () async {
+      final previousMode = GStorage.getSetting<String>(
+        SettingsKeys.bangumiAcceleration,
+      );
+      addTearDown(
+        () =>
+            GStorage.putSetting(SettingsKeys.bangumiAcceleration, previousMode),
+      );
+      await GStorage.putSetting(SettingsKeys.bangumiAcceleration, 'mirror');
+      adapter.respond = (_) async => _json({'data': []});
+      await BangumiClient.instance.post(
+        'https://api.bgm.tv/v0/search/subjects?limit=20&offset=0',
+        data: {'keyword': '葬送的芙莉莲'},
+      );
+      final request = adapter.requests.single;
+      expect(request.uri.host, 'api.bgm.tv');
+      expect(request.headers['Authorization'], 'Bearer saved-token');
+      for (final header in ['X-AppId', 'X-Timestamp', 'X-Signature']) {
+        expect(request.headers.containsKey(header), isFalse);
+      }
+    },
+    skip: BangumiMirrorPolicy.hasCredentials,
+  );
 
   test('failed draft validation preserves credentials and connected account',
       () async {

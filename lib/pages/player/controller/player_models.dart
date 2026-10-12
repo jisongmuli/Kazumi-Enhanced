@@ -2,6 +2,8 @@ import 'package:kazumi/services/video_source/video_source_format.dart';
 
 class PlaybackInitParams {
   final String videoUrl;
+  final String? externalAudioUrl;
+  final bool? autoPlayOverride;
   final int offset;
   final bool isLocalPlayback;
   final VideoSourceFormat videoSourceFormat;
@@ -23,6 +25,8 @@ class PlaybackInitParams {
 
   const PlaybackInitParams({
     required this.videoUrl,
+    this.externalAudioUrl,
+    this.autoPlayOverride,
     required this.offset,
     required this.isLocalPlayback,
     required this.bangumiId,

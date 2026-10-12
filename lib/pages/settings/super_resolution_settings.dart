@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:kazumi/bean/settings/settings_detail_scaffold.dart';
 import 'package:kazumi/pages/player/controller/player_super_resolution.dart';
 import 'package:kazumi/services/storage/storage.dart';
+import 'package:kazumi/pages/player/frame_interpolation_sheet.dart';
+import 'package:kazumi/services/player/frame_interpolation.dart';
 import 'package:kazumi/bean/settings/settings_list.dart';
 
 class SuperResolutionSettings extends StatefulWidget {
@@ -30,7 +32,7 @@ class _SuperResolutionSettingsState extends State<SuperResolutionSettings> {
   @override
   Widget build(BuildContext context) {
     return SettingsDetailScaffold(
-      title: const Text('超分辨率'),
+      title: const Text('超分辨率与插帧'),
       body: SettingsList(
         sections: [
           SettingsRadioSection<SuperResolutionMode>(
@@ -55,6 +57,25 @@ class _SuperResolutionSettingsState extends State<SuperResolutionSettings> {
                 ),
             ],
           ),
+          SettingsSection(title: const Text('视频插帧'), tiles: [
+            SettingsTile(leading: Icons.slow_motion_video_rounded, title: const Text('默认插帧'),
+              description: Text(InterpolationEngine.fromIndex(GStorage.getSetting(SettingsKeys.interpolationEngine)).label),
+              onPressed: (_) async {
+                final value = await showFrameInterpolationDialog(context, FrameInterpolation(
+                  engine: InterpolationEngine.fromIndex(GStorage.getSetting(SettingsKeys.interpolationEngine)),
+                  multiplier: GStorage.getSetting(SettingsKeys.interpolationMultiplier),
+                  sceneDetection: GStorage.getSetting(SettingsKeys.interpolationSceneDetection),
+                  gpu: GStorage.getSetting(SettingsKeys.interpolationGpu),
+                  processingHeight: GStorage.getSetting(SettingsKeys.interpolationHeight)));
+                if (value == null) return;
+                await GStorage.putSetting(SettingsKeys.interpolationEngine, value.engine.index);
+                await GStorage.putSetting(SettingsKeys.interpolationMultiplier, value.multiplier);
+                await GStorage.putSetting(SettingsKeys.interpolationSceneDetection, value.sceneDetection);
+                await GStorage.putSetting(SettingsKeys.interpolationGpu, value.gpu);
+                await GStorage.putSetting(SettingsKeys.interpolationHeight, value.processingHeight);
+                if (mounted) setState(() {});
+              }),
+          ]),
           SettingsSection(
             title: Text('默认行为'),
             tiles: [

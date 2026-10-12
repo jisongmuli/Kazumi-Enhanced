@@ -6,11 +6,21 @@ import 'package:kazumi/request/clients/danmaku_client.dart';
 import 'package:kazumi/request/config/api_endpoints.dart';
 import 'package:kazumi/services/logging/logger.dart';
 import 'package:kazumi/services/storage/storage.dart';
+import 'package:kazumi/request/apis/bangumi_api.dart';
 
 class DanmakuApi {
   static final DanmakuClient _client = DanmakuClient.instance;
 
   static Future<int> getDanDanBangumiIDByBgmBangumiID(int bgmBangumiID) async {
+    if (!await _client.usesOfficial) {
+      final subject = await BangumiApi.getBangumiInfoByID(bgmBangumiID);
+      if (subject == null) return 0;
+      final title = subject.nameCn.isNotEmpty ? subject.nameCn : subject.name;
+      final results = await searchAnimes(title);
+      // An ambiguous result should be selected explicitly instead of silently using another season.
+      if (results.animes.length != 1) return 0;
+      return results.animes.single.animeId;
+    }
     final path = ApiEndpoints.formatUrl(
       ApiEndpoints.dandanAPIInfoByBgmBangumiId,
       [bgmBangumiID],
@@ -47,6 +57,11 @@ class DanmakuApi {
   ) async {
     if (bangumiID == 0) {
       return [];
+    }
+    if (!await _client.usesOfficial) {
+      final response = await getDanDanEpisodesByDanDanBangumiID(bangumiID);
+      if (episode < 1 || episode > response.episodes.length) return [];
+      return getDanDanmakuByEpisodeID(response.episodes[episode - 1].episodeId);
     }
     // Automatic matching relies on an undocumented episode ID convention.
     return _getComments('$bangumiID${episode.toString().padLeft(4, '0')}');

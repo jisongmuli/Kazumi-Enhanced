@@ -1,0 +1,8 @@
+{
+  "api": "1", "type": "youtube", "name": "YouTube", "version": "1.0",
+  "muliSources": false, "useWebview": false, "useNativePlayer": true,
+  "baseURL": "https://www.youtube.com/",
+  "searchURL": "https://www.youtube.com/results?search_query=@keyword",
+  "searchList": "", "searchName": "", "searchResult": "",
+  "chapterRoads": "", "chapterResult": "", "referer": "https://www.youtube.com/"
+}

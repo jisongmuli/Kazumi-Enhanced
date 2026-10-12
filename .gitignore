@@ -55,3 +55,27 @@ android/build/reports/problems/
 **/macos/Pods/
 **/ios/Podfile.lock
 **/macos/Podfile.lock
+
+# Optional runtimes installed by the setup scripts
+/windows/video_engine/
+/windows/danmaku_engine/
+/windows/youtube_engine/
+/local_overrides/media_kit_video/windows/ANGLE/
+
+# Local tooling, downloaded runtimes, authentication and playback state
+/tools/.downloads/
+/tools/.setup-cache/
+/verification/
+**/node_modules/
+**/__pycache__/
+.env
+.env.*
+*.hive
+*.hive.lock
+*.sqlite
+*.sqlite3
+*.db
+*.download
+*.pfx
+*.p12
+cookies.txt

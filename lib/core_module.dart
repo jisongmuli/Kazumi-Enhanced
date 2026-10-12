@@ -16,6 +16,7 @@ import 'package:kazumi/services/player/history_playback_service.dart';
 import 'package:kazumi/services/shaders/shader_asset_service.dart';
 import 'package:kazumi/services/sync/danmaku_shield_sync_service.dart';
 import 'package:kazumi/services/sync/webdav.dart';
+import 'package:kazumi/pages/portal/portal_controller.dart';
 
 /// Root-owned application data and cross-feature coordinators.
 ///
@@ -45,5 +46,6 @@ final coreModule = createModule(
       ..addSingleton<HistoryController>(HistoryController.new)
       ..addSingleton<MyController>(MyController.new)
       ..addSingleton<DownloadController>(DownloadController.new);
+    c.addSingleton<PortalHub>(PortalHub.new);
   },
 );

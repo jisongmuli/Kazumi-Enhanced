@@ -21,11 +21,13 @@ import 'package:kazumi/services/platform/desktop_window_config.dart';
 import 'package:kazumi/services/platform/webview_feature_service.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/navigation.dart';
+import 'package:kazumi/services/player/video_enhancement_runtime.dart';
+import 'package:kazumi/pages/portal/portal_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerEchHttpLicenses();
-  MediaKit.ensureInitialized();
+  MediaKit.ensureInitialized(libmpv: VideoEnhancementRuntime.initialize());
   if (Platform.isAndroid || Platform.isIOS) {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -43,6 +45,7 @@ void main() async {
     final hivePath = '${(await getApplicationSupportDirectory()).path}/hive';
     await Hive.initFlutter(hivePath);
     await GStorage.init();
+    await PortalStyle.initializePreferences();
   } catch (e) {
     debugPrint('Storage initialization failed: $e');
 

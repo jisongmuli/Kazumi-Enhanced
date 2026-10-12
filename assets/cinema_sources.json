@@ -1,0 +1,315 @@
+{
+  "directory": "http://guozhivip.com/mvs.html",
+  "checkedAt": "2026-10-12",
+  "sources": [
+    {
+      "id": "guozhi1",
+      "name": "麦田影院",
+      "url": "https://www.mtyy7.com/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi2",
+      "name": "独播库",
+      "url": "https://www.dbku.tv/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi3",
+      "name": "可乐影视",
+      "url": "https://www.klyingshi2.com/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi4",
+      "name": "555电影",
+      "url": "https://555k27.com/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi5",
+      "name": "大米星球",
+      "url": "https://dmyy7.com/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi6",
+      "name": "看剧AI",
+      "url": "https://kanju3.com/",
+      "aliases": [
+        "在线看剧"
+      ]
+    },
+    {
+      "id": "guozhi7",
+      "name": "饭搭子影视",
+      "url": "https://fdzys.net/",
+      "searchTemplate": "/yu-{keyword}-xianguan-de-yingpian-shippin-zhibo",
+      "aliases": [],
+      "directoryUrl": "https://fdzys666.xyz/"
+    },
+    {
+      "id": "guozhi8",
+      "name": "Auete影视",
+      "url": "https://www.aeete.com/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi9",
+      "name": "热播之家",
+      "url": "https://www.rebozj.cc/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi10",
+      "name": "金牌影院",
+      "url": "https://www.vv3nwjk.com/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi11",
+      "name": "LIBVIO",
+      "url": "https://libviobd.com/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi13",
+      "name": "好好看",
+      "url": "https://www.hhkan0.com/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi14",
+      "name": "观影GYING",
+      "url": "https://www.xn--10vr61a3xc5x3b.com/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi15",
+      "name": "在线之家",
+      "url": "https://www.zxzj.one/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi16",
+      "name": "TVB云播",
+      "url": "http://www.viptvb07.com/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi17",
+      "name": "可可影视",
+      "url": "https://www.kkys03.com/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi18",
+      "name": "厂长资源",
+      "url": "https://czzy.top/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi19",
+      "name": "初见影视",
+      "url": "https://cjysw.cc/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi20",
+      "name": "华数TV",
+      "url": "https://www.wasu.cn/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi21",
+      "name": "1905电影",
+      "url": "https://www.1905.com/vod/",
+      "aliases": []
+    },
+    {
+      "id": "guozhi22",
+      "name": "浙江卫视",
+      "url": "http://www.zjstv.com/",
+      "aliases": []
+    },
+    {
+      "id": "extra_ai-movie",
+      "name": "爱电影",
+      "url": "https://kuhh4jo.com",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_nfyingshi",
+      "name": "奈菲影视",
+      "url": "https://www.nfyingshi.com",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_ppnix",
+      "name": "PPnix",
+      "url": "https://www.ppnix.com/cn/",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_guangsu-yingshi",
+      "name": "光速影视",
+      "url": "https://www.yingshiso.link/",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_juzong",
+      "name": "剧踪影院",
+      "url": "https://www.juzong01.me/",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_jianyunys",
+      "name": "简云影视",
+      "url": "https://jianyunys.com/",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_pianku",
+      "name": "片库",
+      "url": "https://4k01.pianku.online/",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_66-dapianwang",
+      "name": "66 大片网",
+      "url": "https://www.77dpw.vip/",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_didahd",
+      "name": "嘀嗒影视",
+      "url": "https://www.didahd.xyz/",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_zhuiying",
+      "name": "追影",
+      "url": "https://zhuiying3.cc/",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_kxyy",
+      "name": "开心影院",
+      "url": "https://www.kxyy1.cc/",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_dhvideo",
+      "name": "豆花电影网",
+      "url": "https://dhvideo.cc/",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_skr-skr1-cc-9",
+      "name": "樱之空",
+      "url": "https://skr.skr1.cc:666/",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "extra_kanmovie-com-34",
+      "name": "西瓜影视",
+      "url": "https://www.kanmovie.com/",
+      "aliases": [],
+      "discoveredFrom": "https://github.com/laoma528/awesome-zhuiju-free/blob/main/resources/resources.json"
+    },
+    {
+      "id": "hongguo_official",
+      "name": "红果短剧（官方）",
+      "url": "https://hongguoduanju.com/",
+      "searchTemplate": "/search/{keyword}",
+      "aliases": [],
+      "discoveredFrom": "https://www.novelquickapp.com/"
+    },
+    {
+      "id": "libvio_cam",
+      "name": "LIBVIO（cam入口）",
+      "url": "https://www.libvio.cam/",
+      "aliases": [],
+      "parentId": "guozhi11",
+      "discoveredFrom": "https://libvio.lol/"
+    },
+    {
+      "id": "libvio_lat",
+      "name": "LIBVIO（lat入口）",
+      "url": "https://www.libvio.lat/",
+      "aliases": [],
+      "parentId": "guozhi11",
+      "discoveredFrom": "https://libvio.lol/"
+    },
+    {
+      "id": "libvio_bid",
+      "name": "LIBVIO（bid入口）",
+      "url": "https://www.libvio.bid/",
+      "aliases": [],
+      "parentId": "guozhi11",
+      "discoveredFrom": "https://libvio.lol/"
+    },
+    {
+      "id": "libvio_dev",
+      "name": "LIBVIO（dev入口）",
+      "url": "https://www.libvio.dev/",
+      "aliases": [],
+      "parentId": "guozhi11",
+      "discoveredFrom": "https://libvio.lol/"
+    },
+    {
+      "id": "fdz_com",
+      "name": "饭搭子影视（com入口）",
+      "url": "https://fdzys.com/",
+      "searchTemplate": "/yu-{keyword}-xianguan-de-yingpian-shippin-zhibo",
+      "aliases": [],
+      "parentId": "guozhi7",
+      "discoveredFrom": "https://fdzys666.xyz/"
+    },
+    {
+      "id": "fdz_release",
+      "name": "饭搭子影视（地址公告）",
+      "url": "https://fdzys666.xyz/",
+      "aliases": [],
+      "parentId": "guozhi7",
+      "discoveredFrom": "http://guozhivip.com/mvs.html"
+    },
+    {
+      "id": "libvio_release",
+      "name": "LIBVIO（地址公告）",
+      "url": "https://libvio.lol/",
+      "aliases": [],
+      "parentId": "guozhi11",
+      "discoveredFrom": "https://libvio.lol/"
+    },
+    {
+      "id": "keke_20",
+      "name": "可可影视（keke20入口）",
+      "url": "https://www.keke20.com/",
+      "aliases": [],
+      "parentId": "guozhi17",
+      "discoveredFrom": "https://dl.kekedy.app/"
+    },
+    {
+      "id": "keke_release",
+      "name": "可可影视（地址公告）",
+      "url": "https://dl.kekedy.app/",
+      "aliases": [],
+      "parentId": "guozhi17",
+      "discoveredFrom": "https://dl.kekedy.app/"
+    }
+  ]
+}
