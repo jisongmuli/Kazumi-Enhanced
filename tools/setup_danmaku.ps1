@@ -1,4 +1,4 @@
-param([string]$NodePath = '', [string]$Proxy = '')
+param([string]$NodePath = '', [string]$Proxy = '', [string]$Destination = '')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 if (-not $NodePath) { $NodePath = (Get-Command node.exe -ErrorAction Stop).Source }
@@ -6,7 +6,7 @@ if ([int]((& $NodePath --version).TrimStart('v').Split('.')[0]) -lt 22) { throw 
 $nodeFolder = Split-Path -Parent $NodePath
 $npmPath = Join-Path $nodeFolder 'npm.cmd'
 if (-not (Test-Path -LiteralPath $npmPath)) { $npmPath = (Get-Command npm.cmd -ErrorAction Stop).Source }
-$engine = Join-Path $projectRoot 'windows\danmaku_engine'
+$engine = if ($Destination) { [IO.Path]::GetFullPath($Destination) } else { Join-Path $projectRoot 'windows\danmaku_engine' }
 New-Item -ItemType Directory -Force -Path $engine | Out-Null
 $revision = 'f47b786876f2ab51ef69518e5e0b1c0574664589'
 $gitArguments = @()
@@ -27,6 +27,7 @@ foreach ($entry in Get-ChildItem -LiteralPath $source -Force | Where-Object { $_
 }
 Copy-Item -LiteralPath $NodePath -Destination (Join-Path $engine 'node.exe') -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'kazumi-danmaku-launcher.mjs') -Destination (Join-Path $engine 'kazumi-launcher.mjs') -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'danmaku-package-lock.json') -Destination (Join-Path $engine 'package-lock.json') -Force
 Push-Location -LiteralPath $engine
 try {
     $npmArguments = @('ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund')
