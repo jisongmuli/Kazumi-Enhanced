@@ -65,7 +65,9 @@ class _InterpolationDialogState extends State<_InterpolationDialog> {
                 onChanged: (enabled) => setState(
                   () => value = value.copyWith(
                     engine: enabled
-                        ? InterpolationEngine.rifeFast
+                        ? VideoEnhancementRuntime.available
+                              ? InterpolationEngine.rifeFast
+                              : InterpolationEngine.opticalFlow
                         : InterpolationEngine.off,
                   ),
                 ),
@@ -90,6 +92,10 @@ class _InterpolationDialogState extends State<_InterpolationDialog> {
               ),
               const SizedBox(height: 12),
               Text(value.engine.description),
+              if (!VideoEnhancementRuntime.available) ...[
+                const SizedBox(height: 8),
+                const Text('当前设备的 RIFE AI 插帧组件不可用，可选择关闭或普通光流。'),
+              ],
               if (value.engine != InterpolationEngine.off) ...[
                 const SizedBox(height: 12),
                 Wrap(

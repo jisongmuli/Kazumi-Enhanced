@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/request/core/danmaku_endpoint.dart';
@@ -46,7 +47,11 @@ class _EndpointDialogState extends State<_EndpointDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('留空且未配置凭据时，使用本机多来源弹幕服务。可填写弹弹play兼容接口的根地址。'),
+              Text(
+                Platform.isWindows
+                    ? '留空且未配置凭据时，使用本机多来源弹幕服务。可填写弹弹play兼容接口的根地址。'
+                    : '平板需要配置可访问的弹弹play兼容接口，或填写官方 AppId 和 AppSecret。',
+              ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: endpoint,

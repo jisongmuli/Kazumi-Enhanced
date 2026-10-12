@@ -7,6 +7,38 @@ import 'package:flutter/material.dart';
 import 'package:kazumi/pages/player/frame_interpolation_sheet.dart';
 
 void main() {
+  testWidgets('enabling without the AI runtime selects usable optical flow', (
+    tester,
+  ) async {
+    FrameInterpolation? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                result = await showFrameInterpolationDialog(
+                  context,
+                  const FrameInterpolation(),
+                );
+              },
+              child: const Text('打开插帧'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打开插帧'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('启用插帧'));
+    await tester.pumpAndSettle();
+    expect(find.text('当前设备的 RIFE AI 插帧组件不可用，可选择关闭或普通光流。'), findsOneWidget);
+    await tester.ensureVisible(find.text('应用'));
+    await tester.tap(find.text('应用'));
+    await tester.pumpAndSettle();
+    expect(result?.engine, InterpolationEngine.opticalFlow);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'closing remains available when the custom multiplier is invalid',
     (tester) async {

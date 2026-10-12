@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
@@ -16,6 +17,7 @@ import 'package:kazumi/pages/portal/portal_theme.dart';
 import 'package:kazumi/repositories/history_repository.dart';
 import 'package:kazumi/services/cinema/cinema_service.dart';
 import 'package:kazumi/services/player/history_playback_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PortalPage extends StatefulWidget {
   const PortalPage({
@@ -610,11 +612,32 @@ class _PortalPageState extends State<PortalPage> with KazumiDialogOwner {
                 style: const TextStyle(fontSize: 12, color: PortalStyle.muted),
               ),
             ),
-            TextButton(
-              key: ValueKey('retry:${category.name}'),
-              onPressed: () => controller.retry(category),
-              child: const Text('重试'),
-            ),
+            if (category == PortalCategory.youtube && !Platform.isWindows)
+              TextButton(
+                key: const ValueKey('portal-open-youtube'),
+                onPressed: () async {
+                  final query = controller.keyword.trim();
+                  final url = query.isEmpty
+                      ? Uri.https('www.youtube.com', '/')
+                      : Uri.https('www.youtube.com', '/results', {
+                          'search_query': query,
+                        });
+                  if (!await launchUrl(
+                        url,
+                        mode: LaunchMode.externalApplication,
+                      ) &&
+                      mounted) {
+                    KazumiDialog.showToast(message: '无法打开浏览器');
+                  }
+                },
+                child: const Text('打开 YouTube'),
+              )
+            else
+              TextButton(
+                key: ValueKey('retry:${category.name}'),
+                onPressed: () => controller.retry(category),
+                child: const Text('重试'),
+              ),
           ],
         ),
       );

@@ -27,7 +27,11 @@ class LocalDanmakuService {
     final node = File(path.join(directory, 'node.exe'));
     final launcher = File(path.join(directory, 'kazumi-launcher.mjs'));
     if (!Platform.isWindows || !node.existsSync() || !launcher.existsSync()) {
-      throw StateError('本机弹幕组件未安装，请在弹幕设置中配置兼容接口或弹弹play凭据');
+      throw StateError(
+        Platform.isWindows
+            ? '本机弹幕组件未安装，请在弹幕设置中配置兼容接口或弹弹play凭据'
+            : '平板需要在线弹幕接口，请在设置中的“弹幕接口”配置兼容接口或官方凭据',
+      );
     }
     final reservation = await ServerSocket.bind(
       InternetAddress.loopbackIPv4,

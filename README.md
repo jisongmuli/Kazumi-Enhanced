@@ -56,13 +56,14 @@ flutter analyze --no-fatal-infos --fatal-warnings
 flutter test --no-pub
 ```
 
-增强版在 Windows 本机通过 **280 项测试**，已验证主页真实目录/分类/搜索、跨站片源检索、桌面和窄屏布局、YouTube 实际画质、插帧动态启停和中间帧。联网/原生 GPU 探测位于 `tools/*_live_test.dart`，不混入普通离线测试。
+增强版在 Windows 本机通过 **282 项测试**，已验证主页真实目录/分类/搜索、跨站片源检索、首次安装内置规则、桌面和窄屏布局、YouTube 实际画质、插帧动态启停和中间帧。联网/原生 GPU 探测位于 `tools/*_live_test.dart`，不混入普通离线测试。
 
 GitHub Actions 在推送 main 和提交 PR 时执行 Windows 安装、检查、测试、编译，并提供便携构建 artifact。其他平台沿用上游源码，但此增强版尚未逐一验证；上游原工作流保存在 `.github/upstream-workflows/` 供参考。
 
 ## 使用说明
 
 - [主页功能与交互](tools/PORTAL.md)
+- [Android 平板 APK 与平台差异](tools/ANDROID.md)
 - [影视与短剧目录](tools/CINEMA.md)
 - [YouTube 与画质选择](tools/YOUTUBE.md)
 - [插帧开关与生效检测](tools/INTERPOLATION.md)

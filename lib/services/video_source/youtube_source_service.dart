@@ -257,6 +257,9 @@ class YoutubeSourceService {
     List<String> args, {
     RuleCancelToken? cancelToken,
   }) async {
+    if (!Platform.isWindows) {
+      throw StateError('当前版本在平板上通过浏览器观看 YouTube，请点击“打开 YouTube”');
+    }
     if (!available)
       throw StateError('YouTube 组件未安装，请运行 tools/setup_youtube.ps1 后重新编译');
     if (cancelToken?.isCancelled ?? false) throw StateError('YouTube 请求已取消');

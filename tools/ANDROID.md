@@ -1,0 +1,35 @@
+# Android 平板安装包
+
+增强版的 Android 应用标识为 `io.github.jisongmuli.kazumi_enhanced`，显示名称为 Kazumi Enhanced。可与上游 Kazumi 同时安装，各自保存设置和历史。
+
+## 编译
+
+需要 Flutter 3.47.6、完整 JDK 17/21（包含 `jlink`）、Android SDK Platform 36、Build Tools 36、NDK 28.2.13676358 和 CMake 3.22.1。部分插件还需要 SDK Platform 31/33/34/35。SDK 路径通过 `ANDROID_HOME` 或未提交的 `android/local.properties` 配置。
+
+```powershell
+flutter pub get
+flutter build apk --release --split-per-abi --target-platform=android-arm64 --build-name=2.3.8 --build-number=2030801
+```
+
+ARM64 输出为 `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`，最低 Android 7.0。发布构建应配置自己的固定签名，后续覆盖安装须使用同一私钥。将以下字段保存到本机 `android/key.properties`，或通过环境变量 `KAZUMI_KEYSTORE_PROPERTIES` 指向其他本机属性文件：
+
+```properties
+storeFile=你的签名文件完整路径
+storePassword=你的密码
+keyAlias=你的别名
+keyPassword=你的密码
+```
+
+私钥与属性文件不进入仓库。未配置发布签名时沿用调试签名，适合开发验证；分发时请自行提供签名。
+
+## 功能与平台差异
+
+- 新版主页、分类、影视目录、红果网页公开集数、跨站搜索、播放来源筛选、历史记录和原生视频播放使用共享代码。
+- 已收录的影视站在 Android 上同样参与播放来源检索；是否可读取取决于站点网络、验证和页面结构。
+- 首次安装导入 16 条公开动漫规则，加上 45 个影视/短剧站入口，共 61 条内置检索来源。来源和快照见 [内置规则说明](BUNDLED_RULES.md)，不会把电脑上的私人规则、Cookie 或历史打进 APK。
+- YouTube 的 Windows yt-dlp / Node 组件不包含在 APK 中；Android 页面提供“打开 YouTube”，在外部浏览器观看并使用 YouTube 提供的画质选项。
+- Windows RIFE / VapourSynth 组件不包含在 APK 中；AI 算法不可选。普通光流依赖 Android 播放器及 CPU 性能，未生效时会显示实际检测结果，可以关闭。
+- Android 弹幕需要在“设置 → 弹幕接口”填写可访问的兼容服务地址，或填写自己的官方 AppId / AppSecret。本机 Windows Node 弹幕服务不包含在 APK 中。
+- APK 不包含桌面端的播放历史、网站 Cookie、弹幕凭据、签名私钥或 Windows 可执行组件。
+
+把 ARM64 APK 传到平板，点击文件并按系统提示允许此次来源安装。若使用兼容服务或代理，需要在平板上单独配置；电脑上的本地代理地址不能直接用于平板。
