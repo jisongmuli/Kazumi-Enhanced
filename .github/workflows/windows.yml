@@ -21,7 +21,7 @@ jobs:
       - uses: subosito/flutter-action@v2.16.0
         with:
           channel: stable
-          flutter-version-file: pubspec.yaml
+          flutter-version: '3.47.6'
           cache: true
       - uses: actions/setup-node@v4
         with:
