@@ -26,7 +26,12 @@ class DanmakuEntry {
     double timeValue = double.parse(parts[0]);
     int typeValue = int.parse(parts[1]);
     Color color = generateDanmakuColor(int.parse(parts[2]));
-    String sourceValue = parts[3];
+    // Public compatibility services use [bilibili] / [bilibili1], while
+    // the player's source filter uses the canonical BiliBili spelling.
+    String sourceValue = parts[3].replaceAll(
+      RegExp(r'\bbilibili\d*\b', caseSensitive: false),
+      'BiliBili',
+    );
     return DanmakuEntry(
         time: timeValue,
         message: messageValue,

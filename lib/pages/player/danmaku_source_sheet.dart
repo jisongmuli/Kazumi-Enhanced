@@ -204,7 +204,11 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = '分集加载失败';
+        _error = error is StateError
+            ? error.message.toString()
+            : error is NetworkException
+            ? '分集加载失败：${error.message}'
+            : '分集数据格式异常，请更新或检查弹幕接口';
       });
     }
   }
@@ -221,10 +225,16 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
       KazumiDialog.showToast(
         message: hasDanmakus ? '已切换弹幕源' : '暂无弹幕',
       );
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() => _loading = false);
-      KazumiDialog.showToast(message: '弹幕源切换失败');
+      KazumiDialog.showToast(
+        message: error is StateError
+            ? error.message.toString()
+            : error is NetworkException
+            ? '弹幕加载失败：${error.message}'
+            : '弹幕源切换失败，请重试或更换分集',
+      );
     }
   }
 

@@ -95,6 +95,9 @@ class DanmakuClient {
         throw StateError('弹幕接口：${data['errorMessage'] ?? '请求失败'}');
       return data;
     } on DioException catch (e) {
+      if (e.response?.statusCode == 429) {
+        throw StateError('弹幕接口请求过于频繁，请稍后重试');
+      }
       if (e.response?.statusCode == 401 || e.response?.statusCode == 403) {
         throw StateError('弹幕接口认证失败，请在弹幕设置中检查凭据或接口地址');
       }

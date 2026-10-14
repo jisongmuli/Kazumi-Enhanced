@@ -6,7 +6,11 @@ import 'dart:math';
 import 'package:path/path.dart' as path;
 
 class LocalDanmakuService {
+  LocalDanmakuService({String? runtimeDirectory})
+    : _runtimeDirectory = runtimeDirectory;
+
   static final instance = LocalDanmakuService();
+  final String? _runtimeDirectory;
   Process? _process;
   Future<Uri>? _starting;
   Uri? _endpoint;
@@ -20,10 +24,9 @@ class LocalDanmakuService {
   }
 
   Future<Uri> _start() async {
-    final directory = path.join(
-      path.dirname(Platform.resolvedExecutable),
-      'danmaku_engine',
-    );
+    final directory =
+        _runtimeDirectory ??
+        path.join(path.dirname(Platform.resolvedExecutable), 'danmaku_engine');
     final node = File(path.join(directory, 'node.exe'));
     final launcher = File(path.join(directory, 'kazumi-launcher.mjs'));
     if (!Platform.isWindows || !node.existsSync() || !launcher.existsSync()) {
@@ -52,6 +55,9 @@ class LocalDanmakuService {
         'ADMIN_TOKEN': token,
         'SOURCE_ORDER': 'bilibili,tencent,qiyi,youku',
         'PROXY_URL': '',
+        // This token-protected service is owned by one player. The upstream
+        // public-server default (three loads/minute) rejects ordinary switching.
+        'RATE_LIMIT_MAX_REQUESTS': '0',
       },
     );
     _process = process;
@@ -88,6 +94,18 @@ class LocalDanmakuService {
     } catch (_) {
       process.kill();
       rethrow;
+    }
+  }
+
+  Future<void> shutdown() async {
+    final process = _process;
+    if (process == null) return;
+    await process.stdin.close();
+    try {
+      await process.exitCode.timeout(const Duration(seconds: 3));
+    } on TimeoutException {
+      process.kill();
+      await process.exitCode;
     }
   }
 }

@@ -17,6 +17,7 @@
 - YouTube 关键词、视频链接与播放列表；播放器按实际可用格式提供画质选择，支持音视频分离流。
 - Bangumi 源码版搜索回退及弹幕接口配置；可选本机弹幕服务。
 - Android 弹幕默认使用内置哔哩哔哩公开来源，支持搜索、分集及带时间/颜色/位置的弹幕；可继续配置兼容服务或自己的官方凭据。
+- Windows 本机多源弹幕兼容文本集号，支持连续切换分集；切换失败保留原有弹幕并提示原因，哔哩哔哩来源标签与播放器的来源开关一致。
 - Anime4K 与 ArtCNN 超分辨率；RIFE 4.6、4.25 Lite、4.26、4.26 Large 和普通光流插帧，支持关闭、倍数及分辨率设置，显示实际输出帧率。
 - 播放网络重试、代理和缓冲策略；断点续播、集数与历史进度保留。
 
@@ -58,7 +59,7 @@ flutter analyze --no-fatal-infos --fatal-warnings
 flutter test --no-pub
 ```
 
-增强版在 Windows 本机通过 **297 项测试**，已验证主页真实目录/分类/搜索、跨站片源检索、首次安装内置规则、桌面和窄屏布局、YouTube 实际画质、插帧动态启停和中间帧。平板网络探测在不使用电脑代理的情况下验证五个动漫分类、分页、搜索和封面读取；弹幕探测验证默认来源的搜索、真实分集及整集弹幕读取。尚未完成 Android 平板实机复核。联网/原生 GPU 探测位于 `tools/*_live_test.dart`，不混入普通离线测试。
+增强版在 Windows 本机通过 **302 项测试**，已验证主页真实目录/分类/搜索、跨站片源检索、首次安装内置规则、桌面和窄屏布局、YouTube 实际画质、插帧动态启停和中间帧。平板网络探测在不使用电脑代理的情况下验证五个动漫分类、分页、搜索和封面读取；弹幕探测验证默认来源的搜索、真实分集及整集弹幕读取。Windows 弹幕面板测试覆盖搜索、分集、选集和启用弹幕，联网探测连续读取四个不同分集。尚未完成 Android 平板实机复核。联网/原生 GPU 探测位于 `tools/*_live_test.dart`，不混入普通离线测试。
 
 GitHub Actions 在推送 main 和提交 PR 时执行 Windows 安装、检查、测试、编译，并提供便携构建 artifact。其他平台沿用上游源码，但此增强版尚未逐一验证；上游原工作流保存在 `.github/upstream-workflows/` 供参考。
 
@@ -66,6 +67,7 @@ GitHub Actions 在推送 main 和提交 PR 时执行 Windows 安装、检查、�
 
 - [主页功能与交互](tools/PORTAL.md)
 - [Android 平板 APK 与平台差异](tools/ANDROID.md)
+- [Windows 弹幕获取与故障修复](tools/WINDOWS-DANMAKU.md)
 - [影视与短剧目录](tools/CINEMA.md)
 - [YouTube 与画质选择](tools/YOUTUBE.md)
 - [插帧开关与生效检测](tools/INTERPOLATION.md)

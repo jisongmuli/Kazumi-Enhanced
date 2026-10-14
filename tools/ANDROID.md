@@ -8,7 +8,7 @@
 
 ```powershell
 flutter pub get
-flutter build apk --release --split-per-abi --target-platform=android-arm64 --build-name=2.3.8 --build-number=2030803
+flutter build apk --release --split-per-abi --target-platform=android-arm64 --build-name=2.3.8 --build-number=2030804
 ```
 
 ARM64 输出为 `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`，最低 Android 7.0。发布构建应配置自己的固定签名，后续覆盖安装须使用同一私钥。将以下字段保存到本机 `android/key.properties`，或通过环境变量 `KAZUMI_KEYSTORE_PROPERTIES` 指向其他本机属性文件：

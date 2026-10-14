@@ -13,7 +13,9 @@ class DanmakuEpisode {
     return DanmakuEpisode(
       episodeId: json['episodeId'],
       episodeTitle: json['episodeTitle'],
-      episodeNumber: json['episodeNumber'] as int?,
+      // Compatible services (including the bundled Node backend) return text
+      // numbers; the native source returns integers. Specials can omit a number.
+      episodeNumber: int.tryParse('${json['episodeNumber'] ?? ''}'.trim()),
     );
   }
 
@@ -68,7 +70,10 @@ class DanmakuEpisodeResponse {
 
   Map<String, dynamic> toJson() {
     return {
-      'bangumi': episodes.map((episode) => episode.toJson()).toList(),
+      'bangumi': {
+        'animeId': bangumiId,
+        'episodes': episodes.map((episode) => episode.toJson()).toList(),
+      },
       'errorCode': errorCode,
       'success': success,
       'errorMessage': errorMessage,
