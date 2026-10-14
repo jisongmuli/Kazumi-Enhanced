@@ -7,6 +7,7 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:kazumi/bean/appbar/drag_to_move_bar.dart' as dtb;
+import 'package:kazumi/bean/appbar/desktop_window_controls.dart';
 import 'package:kazumi/bean/card/bangumi_info_card.dart';
 import 'package:kazumi/bean/card/network_img_layer.dart';
 import 'package:kazumi/bean/dialog/adaptive_bottom_sheet.dart';
@@ -353,7 +354,9 @@ class _InfoPageState extends State<InfoPage>
                       bangumiItem: infoController.bangumiItem,
                     ),
                   ),
-                  if (isDesktop() && !showWindowButton)
+                  if (Platform.isWindows)
+                    const DesktopWindowControls()
+                  else if (isDesktop() && !showWindowButton)
                     CloseButton(onPressed: () => windowManager.close()),
                   SizedBox(width: 8),
                 ],

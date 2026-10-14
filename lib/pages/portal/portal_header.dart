@@ -13,6 +13,7 @@ class PortalHeader extends StatefulWidget {
     required this.onHistory,
     required this.onMore,
     this.onClose,
+    this.windowControls,
   });
   final int selectedIndex;
   final ValueChanged<int> onNavigate;
@@ -20,6 +21,7 @@ class PortalHeader extends StatefulWidget {
   final VoidCallback onHistory;
   final ValueChanged<String> onMore;
   final VoidCallback? onClose;
+  final Widget? windowControls;
   static const destinations = [
     (5, '首页'),
     (0, '动漫'),
@@ -55,7 +57,8 @@ class _PortalHeaderState extends State<PortalHeader> {
       bottom: false,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 1050;
+          final wide = constraints.maxWidth >=
+              (widget.windowControls == null ? 1050 : 1180);
           final brand = DragToMoveArea(
             child: InkWell(
               onTap: () => widget.onNavigate(5),
@@ -200,7 +203,9 @@ class _PortalHeaderState extends State<PortalHeader> {
                   PopupMenuItem(value: 'settings', child: Text('设置')),
                 ],
               ),
-              if (widget.onClose != null)
+              if (widget.windowControls != null)
+                widget.windowControls!
+              else if (widget.onClose != null)
                 IconButton(
                   tooltip: '关闭窗口',
                   onPressed: widget.onClose,

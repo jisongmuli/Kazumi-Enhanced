@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/bean/widget/embedded_native_control_area.dart';
+import 'package:kazumi/bean/appbar/desktop_window_controls.dart';
 import 'package:kazumi/services/platform/desktop_window_config.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:kazumi/utils/device.dart';
@@ -30,7 +31,9 @@ class SysAppBar extends StatelessWidget implements PreferredSizeWidget {
     final desktop = isDesktop();
     final appBarActions = <Widget>[...?actions];
     if (desktop) {
-      if (!DesktopWindowConfig.showWindowButton) {
+      if (Platform.isWindows) {
+        appBarActions.add(const DesktopWindowControls());
+      } else if (!DesktopWindowConfig.showWindowButton) {
         appBarActions.add(CloseButton(onPressed: () => windowManager.close()));
       }
       appBarActions.add(const SizedBox(width: 8));

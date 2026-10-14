@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:kazumi/bean/appbar/desktop_window_controls.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter/services.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
@@ -145,6 +147,8 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
                 onSearch: _search,
                 onHistory: () => context.pushNamed('/settings/history/'),
                 onMore: _more,
+                windowControls: Platform.isWindows
+                    ? const DesktopWindowControls() : null,
                 onClose: isDesktop() && !DesktopWindowConfig.showWindowButton
                     ? windowManager.close
                     : null,
